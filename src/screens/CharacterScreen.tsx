@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
   View, Text, TextInput, FlatList, ActivityIndicator,
   TouchableOpacity, StyleSheet, Image, Modal, ScrollView,
@@ -98,36 +98,33 @@ function computeStats(b: Build): Record<string, number> {
 }
 
 /* ============================================================================
- *  DERIVED COMBAT STATS (Max HP/SP, ATK, MATK, DEF, MDEF, Flee, Hit, Crit, ASPD)
- *  ---------------------------------------------------------------------------
- *  The numbers below are EDITABLE defaults using standard Ragnarok-style
- *  formulas. To make a class match the game exactly, read the values in-game
- *  (strip gear, one target level, add stats one at a time) and replace the
- *  constants here — start with JOB_CURVE / COEF, then add a JOB_OVERRIDE.
+ *  DERIVED COMBAT STATS — uses the EXACT in-game per-stat conversions:
+ *   1 STR = P.ATK(melee)+1, HP+15            1 DEX = P.ATK(ranged)+1, Hit+1
+ *   1 VIT = MaxHP+40, MaxHP%+0.1, P.DEF+0.5, M.DEF+0.3
+ *   1 INT = MaxSP+10, MaxSP%+0.2, MATK+1, M.DEF+0.5
+ *   1 AGI = Flee+1, P.DEF+0.5                 1 LUK = CRIT+0.3, ATK+0.2
+ *  Only the flat base HP/SP per job+level is still approximate (linear) since
+ *  that table isn't public — edit JOB_CURVE / JOB_OVERRIDES from in-game.
  * ========================================================================== */
 type Combat = {
-  maxHP: number; maxSP: number; atk: number; matk: number;
-  def: number; mdef: number; flee: number; hit: number; crit: number; aspd: number;
+  maxHP: number; maxSP: number; patkM: number; patkR: number; matk: number;
+  pdef: number; mdef: number; hit: number; flee: number; crit: number;
 };
 
-// Max HP/SP at 0 VIT/INT = base + perLevel*(level-1).  (linear placeholder)
-const JOB_CURVE = { hpBase: 40, hpPerLevel: 80, spBase: 11, spPerLevel: 6 };
-// per-class overrides — fill from in-game readings, match by name keyword
+// Flat base HP/SP at 0 VIT/INT = base + perLevel*(level-1). (approx placeholder)
+const JOB_CURVE = { hpBase: 100, hpPerLevel: 70, spBase: 30, spPerLevel: 8 };
 const JOB_OVERRIDES: { match: string[]; hpBase?: number; hpPerLevel?: number; spBase?: number; spPerLevel?: number }[] = [
-  // e.g. { match: ["royal guard", "รอยัล"], hpBase: 0, hpPerLevel: 0, spBase: 0, spPerLevel: 0 },
+  // e.g. { match: ["royal guard","รอยัล"], hpBase: 0, hpPerLevel: 0 },
 ];
-// stat -> derived coefficients (editable)
+
+// exact per-stat conversions from the in-game tooltips
 const COEF = {
-  vitHpPct: 1,     // each VIT: +1% Max HP
-  intSpPct: 1,     // each INT: +1% Max SP
-  strAtk: 1,       // each STR: +ATK
-  dexAtkPer5: 1,   // each 5 DEX: +ATK
-  intMatk: 1,      // each INT: +MATK (plus quadratic below)
-  vitDef: 0.5,     // each VIT: +DEF
-  intMdef: 0.5,    // each INT: +MDEF
-  agiFlee: 1,      // each AGI: +Flee (plus level)
-  dexHit: 1,       // each DEX: +Hit (plus level)
-  lukCrit: 0.3,    // each LUK: +Crit
+  strAtk: 1, strHp: 15,            // STR
+  dexAtkRanged: 1, dexHit: 1,      // DEX
+  vitHp: 40, vitHpPct: 0.1, vitPdef: 0.5, vitMdef: 0.3,   // VIT
+  intSp: 10, intSpPct: 0.2, intMatk: 1, intMdef: 0.5,     // INT
+  agiFlee: 1, agiPdef: 0.5,        // AGI
+  lukCrit: 0.3, lukAtk: 0.2,       // LUK
 };
 
 function jobCurve(jobName: string) {
@@ -144,16 +141,15 @@ function jobCurve(jobName: string) {
 // flat combat bonuses coming from gear/cards (localized attr names). Best-effort
 // keyword match; base STR/AGI/.. names are excluded so they never leak in here.
 const COMBAT_ALIASES: { key: keyof Combat; kw: string[] }[] = [
-  { key: "maxHP", kw: ["max hp", "maxhp", "hp สูงสุด", "พลังชีวิตสูงสุด", "生命上限", "體力上限", "hp上限"] },
-  { key: "maxSP", kw: ["max sp", "maxsp", "sp สูงสุด", "พลังเวทสูงสุด", "魔法上限", "sp上限"] },
-  { key: "atk",   kw: ["atk", "พลังโจมตี", "攻擊", "攻击"] },
-  { key: "matk",  kw: ["matk", "magic atk", "พลังเวท", "魔法攻擊", "魔法攻击"] },
-  { key: "def",   kw: ["def", "ป้องกัน", "防禦", "防御"] },
-  { key: "mdef",  kw: ["mdef", "ป้องกันเวท", "魔法防禦", "魔法防御"] },
+  { key: "maxHP", kw: ["max hp", "maxhp", "hp สูงสุด", "พลังชีวิตสูงสุด", "生命上限", "體力上限"] },
+  { key: "maxSP", kw: ["max sp", "maxsp", "max mp", "sp สูงสุด", "mp สูงสุด", "พลังเวทสูงสุด", "魔法上限"] },
+  { key: "patkM", kw: ["p.atk", "patk", "พลังโจมตี", "攻擊", "攻击", "atk"] },
+  { key: "matk",  kw: ["m.atk", "matk", "magic atk", "พลังเวท", "魔法攻擊", "魔法攻击"] },
+  { key: "pdef",  kw: ["p.def", "pdef", "ป้องกัน", "防禦", "防御"] },
+  { key: "mdef",  kw: ["m.def", "mdef", "ป้องกันเวท", "魔法防禦", "魔法防御"] },
   { key: "flee",  kw: ["flee", "หลบ", "回避"] },
   { key: "hit",   kw: ["hit", "แม่นยำ", "命中"] },
   { key: "crit",  kw: ["crit", "คริ", "暴擊", "暴击"] },
-  { key: "aspd",  kw: ["aspd", "ความเร็วโจมตี", "攻速"] },
 ];
 function flatCombatFromGear(totals: Record<string, number>): Partial<Combat> {
   const out: Partial<Combat> = {};
@@ -173,28 +169,30 @@ function computeCombat(b: Build, totals: Record<string, number>): Combat {
   const lvl = b.level;
   const c = jobCurve(b.job?.title || "");
   const g = flatCombatFromGear(totals);
+  const r1 = (x: number) => Math.round(x * 10) / 10;
 
-  const baseHP = c.hpBase + c.hpPerLevel * (lvl - 1);
-  const baseSP = c.spBase + c.spPerLevel * (lvl - 1);
-  const maxHP = Math.floor(baseHP * (1 + (vit * COEF.vitHpPct) / 100)) + (g.maxHP || 0);
-  const maxSP = Math.floor(baseSP * (1 + (intl * COEF.intSpPct) / 100)) + (g.maxSP || 0);
-  const atk = Math.floor(str * COEF.strAtk + Math.floor(dex / 5) * COEF.dexAtkPer5) + (g.atk || 0);
-  const matk = Math.floor(intl * COEF.intMatk + Math.pow(Math.floor(intl / 7), 2)) + (g.matk || 0);
-  const def = Math.floor(vit * COEF.vitDef) + (g.def || 0);
-  const mdef = Math.floor(intl * COEF.intMdef) + (g.mdef || 0);
-  const flee = lvl + Math.floor(agi * COEF.agiFlee) + (g.flee || 0);
-  const hit = lvl + Math.floor(dex * COEF.dexHit) + (g.hit || 0);
-  const crit = Math.floor(luk * COEF.lukCrit) + 1 + (g.crit || 0);
-  const aspd = 150 + (g.aspd || 0); // placeholder — ASPD needs weapon/job table
-  return { maxHP, maxSP, atk, matk, def, mdef, flee, hit, crit, aspd };
+  const hpFlat = c.hpBase + c.hpPerLevel * (lvl - 1) + str * COEF.strHp + vit * COEF.vitHp + (g.maxHP || 0);
+  const maxHP = Math.floor(hpFlat * (1 + (vit * COEF.vitHpPct) / 100));
+  const spFlat = c.spBase + c.spPerLevel * (lvl - 1) + intl * COEF.intSp + (g.maxSP || 0);
+  const maxSP = Math.floor(spFlat * (1 + (intl * COEF.intSpPct) / 100));
+
+  const lukAtk = luk * COEF.lukAtk;
+  const patkM = Math.round(str * COEF.strAtk + lukAtk + (g.patkM || 0));        // melee
+  const patkR = Math.round(dex * COEF.dexAtkRanged + lukAtk + (g.patkM || 0));  // ranged
+  const matk = Math.round(intl * COEF.intMatk + (g.matk || 0));
+  const pdef = r1(vit * COEF.vitPdef + agi * COEF.agiPdef + (g.pdef || 0));
+  const mdef = r1(vit * COEF.vitMdef + intl * COEF.intMdef + (g.mdef || 0));
+  const hit = Math.round(lvl + dex * COEF.dexHit + (g.hit || 0));
+  const flee = Math.round(lvl + agi * COEF.agiFlee + (g.flee || 0));
+  const crit = r1(luk * COEF.lukCrit + (g.crit || 0));
+  return { maxHP, maxSP, patkM, patkR, matk, pdef, mdef, hit, flee, crit };
 }
 
 const COMBAT_ROWS: [keyof Combat, string][] = [
   ["maxHP", "Max HP"], ["maxSP", "Max SP"],
-  ["atk", "ATK"], ["matk", "MATK"],
-  ["def", "DEF"], ["mdef", "MDEF"],
-  ["hit", "Hit"], ["flee", "Flee"],
-  ["crit", "Crit"], ["aspd", "ASPD"],
+  ["patkM", "P.ATK ประชิด"], ["patkR", "P.ATK ระยะไกล"],
+  ["matk", "MATK"], ["pdef", "P.DEF"], ["mdef", "M.DEF"],
+  ["hit", "Hit"], ["flee", "Flee"], ["crit", "CRIT"],
 ];
 
 /* ============================================================================
@@ -305,16 +303,33 @@ function pickPreset(jobName: string): Preset {
 function planAllocate(level: number, preset: Preset): Record<string, number> {
   const stats = freshStats();
   let pts = pointsForLevel(level);
-  const spend = (k: string, cap: number) => {
-    while (stats[k] < cap) {
+  const order = preset.statOrder;
+  const target = (k: string) => preset.targets?.[k] ?? 120;
+  // Round-robin: add 1 point to each stat in priority order each pass. This
+  // SPREADS points (e.g. DEX + AGI + LUK for a Sniper) to maximize DPS — attack
+  // speed (AGI) + crit (LUK) + hit/ranged-ATK (DEX) — instead of dumping every
+  // point into one stat (which only maximizes damage-per-hit, not DPS).
+  let advanced = true;
+  while (advanced && pts > 0) {
+    advanced = false;
+    for (const k of order) {
+      if (stats[k] >= target(k)) continue;
       const c = costToRaise(stats[k]);
-      if (pts < c) return;
-      stats[k] += 1; pts -= c;
+      if (pts < c) continue;
+      stats[k] += 1; pts -= c; advanced = true;
     }
-  };
-  for (const k of preset.statOrder) spend(k, preset.targets?.[k] ?? 120);
-  // leftover points: top up in the same order up to 120
-  for (const k of preset.statOrder) spend(k, 120);
+  }
+  // leftover points: round-robin top-up up to 120 across the same order
+  advanced = true;
+  while (advanced && pts > 0) {
+    advanced = false;
+    for (const k of order) {
+      if (stats[k] >= 120) continue;
+      const c = costToRaise(stats[k]);
+      if (pts < c) continue;
+      stats[k] += 1; pts -= c; advanced = true;
+    }
+  }
   return stats;
 }
 
@@ -327,7 +342,7 @@ const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
     // Archer / Hunter / Sniper / Ranger line
     match: ["archer", "อาเชอร์", "hunter", "ฮันเตอร์", "sniper", "สไนเปอร์", "ranger", "เรนเจอร์"],
     variants: [
-      { name: "ADL (ออโต้)", statOrder: ["DEX", "AGI", "LUK", "VIT", "INT"], targets: { DEX: 120, AGI: 110, LUK: 90 },
+      { name: "ADL (ออโต้)", statOrder: ["DEX", "AGI", "LUK", "VIT", "INT"], targets: { DEX: 110, AGI: 120, LUK: 110 },
         skillBoost: ["strafe", "double", "arrow", "true sight", "concentration", "owl", "vulture", "sharp", "สเตรฟ", "ลูกศร", "แม่นยำ"] },
       { name: "สายนก (Falcon)", statOrder: ["DEX", "LUK", "AGI", "INT", "VIT"], targets: { DEX: 110, LUK: 120, AGI: 80 },
         skillBoost: ["falcon", "blitz", "เหยี่ยว", "นก", "beat", "assault"] },
@@ -449,8 +464,7 @@ function PickerModal({ title, items, iconPaths, onPick, onClose }: {
           <TextInput style={styles.search} placeholder="ค้นหาชื่อ/ความสามารถ เช่น กันสตัน ป้องกันไฟ" placeholderTextColor="#6B7079"
             value={q} onChangeText={setQ} autoFocus />
           {qualities.length > 1 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.pickerFilterRow} keyboardShouldPersistTaps="handled">
+            <View style={styles.pickerFilterRow}>
               <TouchableOpacity onPress={() => setQf(null)} style={[styles.pf, qf == null && styles.pfOn]}>
                 <Text style={[styles.pfText, qf == null && styles.pfTextOn]}>ทั้งหมด</Text>
               </TouchableOpacity>
@@ -463,7 +477,7 @@ function PickerModal({ title, items, iconPaths, onPick, onClose }: {
                   </TouchableOpacity>
                 );
               })}
-            </ScrollView>
+            </View>
           )}
           <FlatList
             data={data} keyExtractor={(it) => String(it.id)} keyboardShouldPersistTaps="handled"
@@ -545,8 +559,9 @@ function tierPool(idx: number): number {
 }
 
 /* ---- real skill planner (loads the live skill tree per job) ---- */
-function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, onClose }: {
-  locale: string; iconPaths: IconPaths | null; initialJobName?: string; boostKeywords?: string[]; onClose: () => void;
+function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, autoApply, onClose }: {
+  locale: string; iconPaths: IconPaths | null; initialJobName?: string;
+  boostKeywords?: string[]; autoApply?: boolean; onClose: () => void;
 }) {
   const [index, setIndex] = useState<Record<number, JobNode> | null>(null);
   const [target, setTarget] = useState<number | null>(null);
@@ -564,8 +579,10 @@ function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, onClos
       setIndex(idx);
       let tgt: number | null = null;
       if (initialJobName) {
-        const n = initialJobName.toLowerCase();
-        const hit = Object.values(idx).find((j) => j.name.toLowerCase() === n && jobPathHasSkills(idx, j.id));
+        const n = initialJobName.trim().toLowerCase();
+        const cands = Object.values(idx).filter((j) => jobPathHasSkills(idx, j.id));
+        let hit = cands.find((j) => j.name.toLowerCase() === n);
+        if (!hit) hit = cands.find((j) => j.name.toLowerCase().includes(n) || n.includes(j.name.toLowerCase()));
         if (hit) tgt = hit.id;
       }
       setTarget(tgt);
@@ -701,7 +718,12 @@ function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, onClos
         next[kindId] = (next[kindId] || 0) + 1;
         return true;
       };
-      // score: damage actives in the latest job first
+      // Priority: damage-boosting passives/masteries FIRST (e.g. Double Attack,
+      // weapon mastery, Improve Dodge for a dagger Assassin), then other
+      // passives, then buffs/utility, then raw damage actives. skill_type can be
+      // unreliable so non-damage skills are ranked above damage regardless.
+      const DMG_PASSIVE_KW = ["mastery", "มาสเตอรี", "double", "ดับเบิล", "improve", "sharp",
+        "atk", "พลังโจมตี", "ดาเมจ", "damage", "crit", "คริ", "blade", "slash", "เพิ่มความแรง"];
       type Item = { kindId: string; nat: number; score: number };
       const items: Item[] = [];
       path.forEach((jid, tier) => {
@@ -710,10 +732,18 @@ function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, onClos
             const a = Number(lv?.pve_percent), b = Number(lv?.pve_flat);
             return (Number.isFinite(a) && a !== 0) || (Number.isFinite(b) && b !== 0);
           });
-          let score = s.passive ? (dmg ? 50 : 30) : dmg ? 100 : 70;
-          score += tier * 6;
           const nm = s.name.toLowerCase();
-          if (boostKeywords && boostKeywords.some((k) => nm.includes(k.toLowerCase()))) score += 300;
+          let score: number;
+          if (s.passive) {
+            score = 120;
+            if (DMG_PASSIVE_KW.some((k) => nm.includes(k))) score += 25; // damage passives first
+          } else if (dmg) {
+            score = 100;                 // raw damage actives
+          } else {
+            score = 110;                 // buffs / utility actives (still above damage)
+          }
+          score += tier * 6;
+          if (boostKeywords && boostKeywords.some((k) => nm.includes(k.toLowerCase()))) score += 250;
           items.push({ kindId: s.kindId, nat: s.naturalMax, score });
         });
       });
@@ -732,6 +762,17 @@ function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, onClos
     });
     setSel(null);
   };
+
+  // When opened from a chosen build line, fill the plan automatically once the
+  // whole job path's skills have loaded — no need to pick/recommend inside.
+  const appliedRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!autoApply || !target || !path.length) return;
+    if (path.some((id) => !jobSkills[id])) return;   // wait until all tiers loaded
+    if (appliedRef.current === target) return;        // only once per target
+    appliedRef.current = target;
+    autoRecommend();
+  }, [autoApply, target, path, jobSkills]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const skillIcon = (icon?: string) =>
     resolveIconUrl({ iconName: icon, iconUrl: icon ? "skill/" + icon + ".webp" : undefined } as any, iconPaths);
@@ -767,7 +808,7 @@ function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, onClos
 
           {!!target && !busy && (
             <TouchableOpacity style={styles.skRecBtn} onPress={autoRecommend}>
-              <Text style={styles.skRecText}>✦ แนะนำสกิลให้ (เน้นดาเมจ)</Text>
+              <Text style={styles.skRecText}>✦ จัดสกิลตามสายนี้อีกครั้ง</Text>
             </TouchableOpacity>
           )}
 
@@ -922,6 +963,14 @@ export default function CharacterScreen() {
   const [variantIdx, setVariantIdx] = useState(0);
   useEffect(() => { setVariantIdx(0); }, [build.job]);
   const activeVariant = variants[variantIdx];
+  // recommended stat spread for the CURRENT level + chosen build line — i.e. the
+  // stats you should be raising right now (updates as the level changes).
+  const recStats = useMemo(() => {
+    const p = activeVariant
+      ? { ...preset, statOrder: activeVariant.statOrder, targets: { ...preset.targets, ...activeVariant.targets } }
+      : preset;
+    return planAllocate(build.level, p);
+  }, [build.level, preset, activeVariant]);
   const applyPlan = () => {
     const p = activeVariant
       ? { ...preset, statOrder: activeVariant.statOrder, targets: { ...preset.targets, ...activeVariant.targets } }
@@ -1051,13 +1100,21 @@ export default function CharacterScreen() {
           <View style={styles.planLine}>
             <Text style={styles.planKey}>สเตตัส</Text>
             <View style={styles.chipWrap}>
-              {preset.statOrder.map((k, i) => (
-                <View key={k} style={styles.chip}>
-                  <Text style={styles.chipText}>{i + 1}. {k}{preset.targets?.[k] ? " " + preset.targets[k] : ""}</Text>
-                </View>
-              ))}
+              {(activeVariant ? activeVariant.statOrder : preset.statOrder).map((k, i) => {
+                const rec = recStats[k] || 1;
+                const cap = activeVariant?.targets?.[k] ?? preset.targets?.[k];
+                return (
+                  <View key={k} style={styles.chip}>
+                    <Text style={styles.chipText}>
+                      {i + 1}. {k} <Text style={{ color: "#E8B339" }}>{rec}</Text>
+                      {cap && cap > rec ? <Text style={{ color: "#6B7079" }}> →{cap}</Text> : null}
+                    </Text>
+                  </View>
+                );
+              })}
             </View>
           </View>
+          <Text style={styles.planMini}>ตัวเลขทอง = ควรอัพถึงที่ Lv.{build.level} · →เลข = เป้าหมายสุดท้าย</Text>
           <View style={styles.planDivider} />
           {jobMeta && !!jobMeta.path && (
             <>
@@ -1161,22 +1218,35 @@ export default function CharacterScreen() {
           <Text style={styles.sectionTitle}>ลงสเตตัส</Text>
           <Text style={[styles.pointsLeft, remaining < 0 && { color: "#E06C6C" }]}>เหลือ {remaining} / {totalPoints}</Text>
         </View>
+        <Text style={styles.recHint}>
+          แนะนำสำหรับ {activeVariant ? activeVariant.name : preset.role} ที่ Lv.{build.level} — ตัวเลขทองคือค่าที่ควรอัพถึง
+        </Text>
         <View style={styles.statBox}>
           {BASE_STATS.map((k, i) => {
             const v = build.stats[k];
             const cost = costToRaise(v);
             const canAdd = remaining >= cost;
+            const rec = recStats[k] || 1;
+            const below = v < rec;
             return (
               <View key={k} style={[styles.allocRow, i % 2 === 1 && styles.statRowAlt]}>
                 <Text style={styles.allocLabel}>{k}</Text>
-                <Text style={styles.allocValue}>{v}</Text>
-                <Text style={styles.allocCost}>cost {cost}</Text>
+                <Text style={[styles.allocValue, below && { color: "#E8B339" }]}>{v}</Text>
+                <View style={{ flex: 1, marginLeft: 8 }}>
+                  <Text style={styles.allocRec}>
+                    แนะนำ <Text style={{ color: "#E8B339" }}>{rec}</Text>{below ? "  ▲ ควรอัพ" : v > rec ? "  เกิน" : "  ✓"}
+                  </Text>
+                  <Text style={styles.allocCost}>cost {cost}</Text>
+                </View>
                 <TouchableOpacity disabled={v <= 1} onPress={() => addStat(k, -1)} style={[styles.stepBtn, v <= 1 && styles.stepDisabled]}><Text style={styles.stepText}>−</Text></TouchableOpacity>
-                <TouchableOpacity disabled={!canAdd} onPress={() => addStat(k, 1)} style={[styles.stepBtn, styles.stepAdd, !canAdd && styles.stepDisabled]}><Text style={[styles.stepText, styles.stepAddText]}>＋</Text></TouchableOpacity>
+                <TouchableOpacity disabled={!canAdd} onPress={() => addStat(k, 1)} style={[styles.stepBtn, styles.stepAdd, !canAdd && styles.stepDisabled, below && canAdd && styles.stepAddRec]}><Text style={[styles.stepText, styles.stepAddText]}>＋</Text></TouchableOpacity>
               </View>
             );
           })}
         </View>
+        <TouchableOpacity style={styles.fillRecBtn} onPress={applyPlan}>
+          <Text style={styles.fillRecText}>เติมสเตตัสตามแนะนำ (Lv.{build.level})</Text>
+        </TouchableOpacity>
 
         {/* cards per equipped item */}
         <Text style={styles.sectionTitle}>การ์ดที่สวมใส่</Text>
@@ -1229,7 +1299,7 @@ export default function CharacterScreen() {
       )}
       {picker && picker.kind === "skillplan" && (
         <SkillPlanner locale={locale} iconPaths={iconPaths} initialJobName={build.job?.title}
-          boostKeywords={activeVariant?.skillBoost} onClose={() => setPicker(null)} />
+          boostKeywords={activeVariant?.skillBoost} autoApply onClose={() => setPicker(null)} />
       )}
     </View>
   );
@@ -1239,139 +1309,145 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0E0F12" },
   center: { alignItems: "center", justifyContent: "center" },
   topRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingTop: 10, paddingBottom: 6 },
-  screenTitle: { color: "#F2F3F5", fontSize: 20, fontWeight: "800" },
+  screenTitle: { color: "#F2F3F5", fontSize: 20, fontWeight: "bold" },
   topBtn: { backgroundColor: "#16181D", paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, marginLeft: 6 },
   topBtnOff: { opacity: 0.4 },
-  topBtnText: { color: "#C7CBD1", fontSize: 12, fontWeight: "700" },
+  topBtnText: { color: "#C7CBD1", fontSize: 12, fontWeight: "bold" },
 
   levelRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#16181D", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginTop: 12 },
-  levelLabel: { color: "#E8B339", fontSize: 14, fontWeight: "800" },
+  levelLabel: { color: "#E8B339", fontSize: 14, fontWeight: "bold" },
   levelCtrl: { flexDirection: "row", alignItems: "center" },
   lvBtn: { width: 34, height: 34, borderRadius: 8, backgroundColor: "#0E0F12", alignItems: "center", justifyContent: "center" },
-  lvBtnText: { color: "#E8B339", fontSize: 20, fontWeight: "800", lineHeight: 22 },
-  lvInput: { color: "#F2F3F5", fontSize: 17, fontWeight: "800", textAlign: "center", minWidth: 44, marginHorizontal: 4 },
-  lvMax: { color: "#6B7079", fontSize: 13, fontWeight: "700", marginRight: 6 },
+  lvBtnText: { color: "#E8B339", fontSize: 20, fontWeight: "bold", lineHeight: 22 },
+  lvInput: { color: "#F2F3F5", fontSize: 17, fontWeight: "bold", textAlign: "center", minWidth: 44, marginHorizontal: 4 },
+  lvMax: { color: "#6B7079", fontSize: 13, fontWeight: "bold", marginRight: 6 },
 
   classRow: { flexDirection: "row", alignItems: "center", backgroundColor: "#16181D", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, marginTop: 8 },
-  classLabel: { color: "#6B7079", fontSize: 12, fontWeight: "700", marginRight: 12 },
-  classValue: { color: "#F2F3F5", fontSize: 15, fontWeight: "800", flex: 1 },
+  classLabel: { color: "#6B7079", fontSize: 12, fontWeight: "bold", marginRight: 12 },
+  classValue: { color: "#F2F3F5", fontSize: 15, fontWeight: "bold", flex: 1 },
   chev: { color: "#8A8F99", fontSize: 14 },
 
-  sectionTitle: { color: "#E8B339", fontSize: 13, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.5, marginTop: 18, marginBottom: 8 },
+  sectionTitle: { color: "#E8B339", fontSize: 15, fontWeight: "bold", marginTop: 18, marginBottom: 8 },
   sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  pointsLeft: { color: "#E8B339", fontSize: 14, fontWeight: "800" },
-  tuneNote: { color: "#6B7079", fontSize: 10, fontWeight: "700" },
+  pointsLeft: { color: "#E8B339", fontSize: 14, fontWeight: "bold" },
+  tuneNote: { color: "#6B7079", fontSize: 10, fontWeight: "bold" },
 
   planBtn: { backgroundColor: "#E8B339", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  planBtnText: { color: "#0E0F12", fontSize: 12, fontWeight: "800" },
+  planBtnText: { color: "#0E0F12", fontSize: 12, fontWeight: "bold" },
   planBox: { backgroundColor: "#16181D", borderRadius: 12, padding: 12 },
   planLine: { flexDirection: "row", alignItems: "flex-start" },
-  planKey: { color: "#E8B339", fontSize: 12, fontWeight: "800", marginBottom: 4, marginRight: 8 },
+  planKey: { color: "#E8B339", fontSize: 12, fontWeight: "bold", marginBottom: 4, marginRight: 8 },
   chipWrap: { flex: 1, flexDirection: "row", flexWrap: "wrap" },
   chip: { backgroundColor: "#0E0F12", borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3, marginRight: 5, marginBottom: 5 },
   buildChip: { backgroundColor: "#0E0F12", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, marginRight: 6, marginBottom: 6, borderWidth: 1, borderColor: "#3A3F48" },
   buildChipOn: { backgroundColor: "#E8B339", borderColor: "#E8B339" },
-  buildChipText: { color: "#C7CBD1", fontSize: 12, fontWeight: "800" },
+  buildChipText: { color: "#C7CBD1", fontSize: 12, fontWeight: "bold" },
   buildChipTextOn: { color: "#0E0F12" },
-  chipText: { color: "#C7CBD1", fontSize: 11, fontWeight: "800" },
+  chipText: { color: "#C7CBD1", fontSize: 11, fontWeight: "bold" },
   planDivider: { height: 1, backgroundColor: "#23262D", marginVertical: 8 },
   planItem: { color: "#C7CBD1", fontSize: 12, lineHeight: 18, marginBottom: 1 },
   planHint: { color: "#6B7079", fontSize: 11, marginTop: 8, fontStyle: "italic" },
+  planMini: { color: "#6B7079", fontSize: 10, marginTop: 4 },
   skPlanOpen: { marginTop: 10, backgroundColor: "#0E0F12", borderRadius: 8, paddingVertical: 9, alignItems: "center", borderWidth: 1, borderColor: "#3A3F48" },
-  skPlanOpenText: { color: "#E8B339", fontSize: 13, fontWeight: "800" },
+  skPlanOpenText: { color: "#E8B339", fontSize: 13, fontWeight: "bold" },
 
-  spBudget: { color: "#E8B339", fontSize: 15, fontWeight: "800" },
+  spBudget: { color: "#E8B339", fontSize: 15, fontWeight: "bold" },
   jobSelectBtn: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#0E0F12", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11 },
-  jobSelectText: { color: "#F2F3F5", fontSize: 15, fontWeight: "800", flex: 1 },
+  jobSelectText: { color: "#F2F3F5", fontSize: 15, fontWeight: "bold", flex: 1 },
   skRecBtn: { backgroundColor: "#E8B339", borderRadius: 10, paddingVertical: 10, alignItems: "center", marginTop: 8 },
-  skRecText: { color: "#0E0F12", fontSize: 13, fontWeight: "800" },
+  skRecText: { color: "#0E0F12", fontSize: 13, fontWeight: "bold" },
   skJobSection: { marginBottom: 14 },
   skJobHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
-  skJobName: { color: "#F2F3F5", fontSize: 15, fontWeight: "800" },
-  skJobPts: { color: "#8A8F99", fontSize: 13, fontWeight: "800" },
+  skJobName: { color: "#F2F3F5", fontSize: 15, fontWeight: "bold" },
+  skJobPts: { color: "#8A8F99", fontSize: 13, fontWeight: "bold" },
   skLockNote: { color: "#6B7079", fontSize: 11, marginBottom: 6, fontStyle: "italic" },
   skGrid: { flexDirection: "row", flexWrap: "wrap" },
   skNode: { width: "25%", alignItems: "center", paddingVertical: 6, paddingHorizontal: 2 },
   skIconBox: { width: 46, height: 46, borderRadius: 10, backgroundColor: "#0E0F12", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#23262D" },
   skIconActive: { borderColor: "#E8B339" },
   skIcon: { width: 34, height: 34 },
-  skLvl: { position: "absolute", bottom: 1, right: 3, color: "#C7CBD1", fontSize: 9, fontWeight: "800" },
-  skName: { color: "#C7CBD1", fontSize: 10, fontWeight: "700", textAlign: "center", marginTop: 3, height: 26 },
+  skLvl: { position: "absolute", bottom: 1, right: 3, color: "#C7CBD1", fontSize: 9, fontWeight: "bold" },
+  skName: { color: "#C7CBD1", fontSize: 10, fontWeight: "bold", textAlign: "center", marginTop: 3, height: 26 },
   skCtrl: { flexDirection: "row", marginTop: 2 },
   skBtn: { width: 24, height: 24, borderRadius: 12, backgroundColor: "#0E0F12", alignItems: "center", justifyContent: "center", marginHorizontal: 1, borderWidth: 1, borderColor: "#23262D" },
   skBtnAdd: { backgroundColor: "#E8B339", borderColor: "#E8B339" },
-  skBtnText: { color: "#C7CBD1", fontSize: 12, fontWeight: "800", lineHeight: 14 },
+  skBtnText: { color: "#C7CBD1", fontSize: 12, fontWeight: "bold", lineHeight: 14 },
   skDetail: { backgroundColor: "#0E0F12", borderRadius: 10, padding: 12, marginTop: 8 },
-  skDetailName: { color: "#E8B339", fontSize: 13, fontWeight: "800", marginBottom: 4 },
+  skDetailName: { color: "#E8B339", fontSize: 13, fontWeight: "bold", marginBottom: 4 },
   skDetailDes: { color: "#C7CBD1", fontSize: 12, lineHeight: 18 },
 
   equipRow: { flexDirection: "row", alignItems: "center", backgroundColor: "#16181D", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 7 },
-  equipSlot: { color: "#6B7079", fontSize: 11, fontWeight: "700", width: 70 },
+  equipSlot: { color: "#6B7079", fontSize: 11, fontWeight: "bold", width: 70 },
   equipMain: { flex: 1, flexDirection: "row", alignItems: "center" },
   iconBox: { width: 34, height: 34, borderRadius: 8, backgroundColor: "#0E0F12", alignItems: "center", justifyContent: "center", marginRight: 8 },
   icon28: { width: 28, height: 28 },
   iconFallback: { backgroundColor: "#23262D", borderRadius: 6 },
   tier: { borderWidth: 1, borderColor: "#3A3F48", borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1, marginRight: 6 },
-  tierText: { color: "#8A8F99", fontSize: 9, fontWeight: "800" },
-  equipName: { color: "#F2F3F5", fontSize: 14, fontWeight: "700", flex: 1 },
-  equipEmpty: { color: "#4A4F57", fontSize: 14, fontWeight: "600" },
+  tierText: { color: "#8A8F99", fontSize: 9, fontWeight: "bold" },
+  equipName: { color: "#F2F3F5", fontSize: 14, fontWeight: "bold", flex: 1 },
+  equipEmpty: { color: "#4A4F57", fontSize: 14, fontWeight: "bold" },
   equipLocked: { opacity: 0.55 },
-  lockedText: { color: "#6B7079", fontSize: 12, fontWeight: "700", flex: 1 },
+  lockedText: { color: "#6B7079", fontSize: 12, fontWeight: "bold", flex: 1 },
   twoHBadge: { backgroundColor: "#2A2F38", borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, marginLeft: 6 },
-  twoHText: { color: "#9AA0AA", fontSize: 9, fontWeight: "800" },
+  twoHText: { color: "#9AA0AA", fontSize: 9, fontWeight: "bold" },
   refineCtrl: { flexDirection: "row", alignItems: "center" },
   rfBtn: { width: 26, height: 26, borderRadius: 13, backgroundColor: "#0E0F12", alignItems: "center", justifyContent: "center" },
-  rfBtnText: { color: "#E8B339", fontSize: 15, fontWeight: "800", lineHeight: 16 },
-  rfText: { color: "#E8B339", fontSize: 13, fontWeight: "800", minWidth: 30, textAlign: "center" },
-  clear: { color: "#E06C6C", fontSize: 20, fontWeight: "300", lineHeight: 22, marginLeft: 8 },
+  rfBtnText: { color: "#E8B339", fontSize: 15, fontWeight: "bold", lineHeight: 16 },
+  rfText: { color: "#E8B339", fontSize: 13, fontWeight: "bold", minWidth: 30, textAlign: "center" },
+  clear: { color: "#E06C6C", fontSize: 20, fontWeight: "normal", lineHeight: 22, marginLeft: 8 },
 
   statBox: { backgroundColor: "#16181D", borderRadius: 12, overflow: "hidden" },
   statRow: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 10 },
   statRowAlt: { backgroundColor: "#121419" },
-  statLabel: { color: "#8A8F99", fontSize: 14, fontWeight: "600" },
-  statValue: { color: "#F2F3F5", fontSize: 15, fontWeight: "800" },
+  statLabel: { color: "#8A8F99", fontSize: 14, fontWeight: "bold" },
+  statValue: { color: "#F2F3F5", fontSize: 15, fontWeight: "bold" },
 
   allocRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 9 },
-  allocLabel: { color: "#C7CBD1", fontSize: 14, fontWeight: "800", width: 46 },
-  allocValue: { color: "#F2F3F5", fontSize: 18, fontWeight: "800", width: 44, textAlign: "center" },
-  allocCost: { color: "#6B7079", fontSize: 11, fontWeight: "700", flex: 1, marginLeft: 8 },
+  allocRec: { color: "#8A8F99", fontSize: 11, fontWeight: "bold" },
+  recHint: { color: "#6B7079", fontSize: 11, marginBottom: 8, fontStyle: "italic" },
+  stepAddRec: { shadowColor: "#E8B339", shadowOpacity: 0.9, shadowRadius: 6, elevation: 4 },
+  fillRecBtn: { backgroundColor: "#16181D", borderWidth: 1, borderColor: "#E8B339", borderRadius: 10, paddingVertical: 11, alignItems: "center", marginTop: 8 },
+  fillRecText: { color: "#E8B339", fontSize: 13, fontWeight: "bold" },
+  allocLabel: { color: "#C7CBD1", fontSize: 14, fontWeight: "bold", width: 46 },
+  allocValue: { color: "#F2F3F5", fontSize: 18, fontWeight: "bold", width: 44, textAlign: "center" },
+  allocCost: { color: "#6B7079", fontSize: 11, fontWeight: "bold", flex: 1, marginLeft: 8 },
   stepBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: "#0E0F12", alignItems: "center", justifyContent: "center", marginLeft: 8 },
   stepAdd: { backgroundColor: "#E8B339" },
   stepDisabled: { opacity: 0.3 },
-  stepText: { color: "#C7CBD1", fontSize: 19, fontWeight: "800", lineHeight: 20 },
+  stepText: { color: "#C7CBD1", fontSize: 19, fontWeight: "bold", lineHeight: 20 },
   stepAddText: { color: "#0E0F12" },
 
   cardGroup: { backgroundColor: "#16181D", borderRadius: 12, padding: 10, marginBottom: 8 },
   cardGroupHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
-  cardGroupName: { color: "#F2F3F5", fontSize: 14, fontWeight: "800", flex: 1, marginRight: 8 },
+  cardGroupName: { color: "#F2F3F5", fontSize: 14, fontWeight: "bold", flex: 1, marginRight: 8 },
   addBtn: { borderWidth: 1, borderStyle: "dashed", borderColor: "#3A3F48", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4 },
   addBtnFull: { borderStyle: "solid", borderColor: "#23262D", backgroundColor: "#121419" },
-  addText: { color: "#C7CBD1", fontSize: 12, fontWeight: "700" },
+  addText: { color: "#C7CBD1", fontSize: 12, fontWeight: "bold" },
   cardEmpty: { color: "#4A4F57", fontSize: 12 },
   cardRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 4 },
-  cardName: { color: "#C7CBD1", fontSize: 13, fontWeight: "700", flex: 1, marginRight: 8 },
+  cardName: { color: "#C7CBD1", fontSize: 13, fontWeight: "bold", flex: 1, marginRight: 8 },
   cardEffect: { color: "#8A8F99", fontSize: 11, marginTop: 2, lineHeight: 15 },
 
   search: { backgroundColor: "#0E0F12", color: "#F2F3F5", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9, fontSize: 15 },
-  pickerFilterRow: { paddingVertical: 8, alignItems: "center" },
-  pf: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999, marginRight: 6, borderWidth: 1, borderColor: "#3A3F48", backgroundColor: "#0E0F12" },
+  pickerFilterRow: { flexDirection: "row", flexWrap: "wrap", paddingVertical: 8 },
+  pf: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999, marginRight: 6, marginBottom: 6, borderWidth: 1, borderColor: "#3A3F48", backgroundColor: "#0E0F12" },
   pfOn: { backgroundColor: "#C7CBD1", borderColor: "#C7CBD1" },
-  pfText: { color: "#C7CBD1", fontSize: 12, fontWeight: "800" },
+  pfText: { color: "#C7CBD1", fontSize: 12, fontWeight: "bold", lineHeight: 17 },
   pfTextOn: { color: "#0E0F12" },
   empty: { color: "#6B7079", textAlign: "center", marginVertical: 12 },
   error: { color: "#E06C6C", marginBottom: 12, textAlign: "center" },
   retry: { backgroundColor: "#E8B339", paddingHorizontal: 20, paddingVertical: 8, borderRadius: 8 },
-  retryText: { color: "#0E0F12", fontWeight: "800" },
+  retryText: { color: "#0E0F12", fontWeight: "bold" },
 
   modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)" },
   modalCard: { backgroundColor: "#16181D", borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 20, maxHeight: "85%" },
   modalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: "#3A3F48", alignSelf: "center", marginTop: 10, marginBottom: 14 },
-  modalTitle: { color: "#F2F3F5", fontSize: 18, fontWeight: "800", marginBottom: 12 },
+  modalTitle: { color: "#F2F3F5", fontSize: 18, fontWeight: "bold", marginBottom: 12 },
   pickRow: { flexDirection: "row", alignItems: "center", paddingVertical: 9 },
-  pickName: { color: "#F2F3F5", fontSize: 15, fontWeight: "700" },
+  pickName: { color: "#F2F3F5", fontSize: 15, fontWeight: "bold" },
   pickStats: { color: "#8A8F99", fontSize: 12, marginTop: 2 },
   jobCell: { flex: 1, flexDirection: "row", alignItems: "center", backgroundColor: "#0E0F12", borderRadius: 10, padding: 10, margin: 4 },
-  jobName: { color: "#F2F3F5", fontSize: 13, fontWeight: "700", flex: 1 },
+  jobName: { color: "#F2F3F5", fontSize: 13, fontWeight: "bold", flex: 1 },
   closeBtn: { backgroundColor: "#E8B339", paddingVertical: 14, borderRadius: 12, alignItems: "center", marginTop: 8 },
-  closeText: { color: "#0E0F12", fontSize: 16, fontWeight: "800" },
+  closeText: { color: "#0E0F12", fontSize: 16, fontWeight: "bold" },
 });

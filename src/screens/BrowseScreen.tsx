@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View, Text, TextInput, SectionList, ActivityIndicator,
-  TouchableOpacity, StyleSheet, Image, ScrollView,
+  TouchableOpacity, StyleSheet, Image,
 } from "react-native";
 import {
   fetchData, fetchIconPaths, resolveIconUrl, qualityInfo,
@@ -157,8 +157,7 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
         placeholderTextColor="#6B7079" value={query} onChangeText={setQuery} />
 
       {slotChips.length > 1 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.slotRow} keyboardShouldPersistTaps="handled">
+        <View style={styles.chipWrapRow}>
           <TouchableOpacity onPress={() => setSlotFilter(null)}
             style={[styles.fChip, slotFilter == null && styles.fChipOn]}>
             <Text style={[styles.fText, slotFilter == null && styles.fTextOn]}>ทั้งหมด</Text>
@@ -168,16 +167,15 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
             return (
               <TouchableOpacity key={c.key} onPress={() => setSlotFilter(on ? null : c.key)}
                 style={[styles.fChip, on && styles.fChipOn]}>
-                <Text style={[styles.fText, on && styles.fTextOn]} numberOfLines={1}>{c.label}</Text>
+                <Text style={[styles.fText, on && styles.fTextOn]}>{c.label}</Text>
               </TouchableOpacity>
             );
           })}
-        </ScrollView>
+        </View>
       )}
 
       {subtypeChips.length > 1 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.subRow} keyboardShouldPersistTaps="handled">
+        <View style={styles.chipWrapRow}>
           <TouchableOpacity onPress={() => setSubtypeFilter(null)}
             style={[styles.fChip, styles.subChip, subtypeFilter == null && styles.fChipOn]}>
             <Text style={[styles.fText, subtypeFilter == null && styles.fTextOn]}>ชนิดทั้งหมด</Text>
@@ -187,11 +185,11 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
             return (
               <TouchableOpacity key={st} onPress={() => setSubtypeFilter(on ? null : st)}
                 style={[styles.fChip, styles.subChip, on && styles.fChipOn]}>
-                <Text style={[styles.fText, on && styles.fTextOn]} numberOfLines={1}>{st}</Text>
+                <Text style={[styles.fText, on && styles.fTextOn]}>{st}</Text>
               </TouchableOpacity>
             );
           })}
-        </ScrollView>
+        </View>
       )}
 
       {hasQuality && (
@@ -252,24 +250,23 @@ const styles = StyleSheet.create({
   localeRow: { flexDirection: "row", justifyContent: "flex-end", paddingHorizontal: 16, paddingTop: 8 },
   localeChip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginLeft: 6, backgroundColor: "#16181D" },
   localeChipOn: { backgroundColor: "#E8B339" },
-  localeText: { color: "#8A8F99", fontSize: 12, fontWeight: "700" },
+  localeText: { color: "#8A8F99", fontSize: 12, fontWeight: "bold" },
   localeTextOn: { color: "#0E0F12" },
   search: { marginHorizontal: 16, marginTop: 8, backgroundColor: "#16181D", color: "#F2F3F5",
     borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15 },
   filterRow: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 12, marginTop: 10 },
-  slotRow: { paddingHorizontal: 12, paddingVertical: 8, alignItems: "center" },
-  subRow: { paddingHorizontal: 12, paddingBottom: 6, alignItems: "center" },
-  subChip: { paddingVertical: 4, backgroundColor: "#0E0F12" },
+  chipWrapRow: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 8, paddingTop: 8 },
+  subChip: { backgroundColor: "#0E0F12" },
   fChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999, margin: 4,
     borderWidth: 1, borderColor: "#2A2E36", backgroundColor: "#16181D" },
   fChipOn: { backgroundColor: "#C7CBD1", borderColor: "#C7CBD1" },
-  fText: { color: "#C7CBD1", fontSize: 13, fontWeight: "600" },
-  fTextOn: { color: "#0E0F12", fontWeight: "800" },
+  fText: { color: "#C7CBD1", fontSize: 13, fontWeight: "bold", lineHeight: 18 },
+  fTextOn: { color: "#0E0F12", fontWeight: "bold" },
   count: { color: "#6B7079", fontSize: 12, marginLeft: 18, marginVertical: 4 },
   sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     backgroundColor: "#0E0F12", paddingHorizontal: 18, paddingTop: 12, paddingBottom: 6 },
-  sectionTitle: { color: "#E8B339", fontSize: 15, fontWeight: "800" },
-  sectionCount: { color: "#6B7079", fontSize: 12, fontWeight: "700" },
+  sectionTitle: { color: "#E8B339", fontSize: 15, fontWeight: "bold" },
+  sectionCount: { color: "#6B7079", fontSize: 12, fontWeight: "bold" },
   row: { flexDirection: "row", backgroundColor: "#16181D", borderRadius: 12, padding: 12,
     marginHorizontal: 14, marginVertical: 6 },
   iconWrap: { width: 56, height: 56, borderRadius: 8, backgroundColor: "#0E0F12",
@@ -278,13 +275,13 @@ const styles = StyleSheet.create({
   iconFallback: { backgroundColor: "#23262D", borderRadius: 6 },
   body: { flex: 1 },
   titleRow: { flexDirection: "row", alignItems: "center", marginBottom: 2 },
-  name: { color: "#F2F3F5", fontSize: 15, fontWeight: "700", flex: 1, marginRight: 8 },
+  name: { color: "#F2F3F5", fontSize: 15, fontWeight: "bold", flex: 1, marginRight: 8 },
   badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 },
-  badgeText: { color: "#0E0F12", fontSize: 10, fontWeight: "800" },
+  badgeText: { color: "#0E0F12", fontSize: 10, fontWeight: "bold" },
   effect: { color: "#C7CBD1", fontSize: 13, lineHeight: 18 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   error: { color: "#E06C6C", marginBottom: 12, paddingHorizontal: 24, textAlign: "center" },
   retry: { backgroundColor: "#E8B339", paddingHorizontal: 20, paddingVertical: 8, borderRadius: 8 },
-  retryText: { color: "#0E0F12", fontWeight: "800" },
+  retryText: { color: "#0E0F12", fontWeight: "bold" },
   empty: { color: "#6B7079", textAlign: "center", marginTop: 40 },
 });
