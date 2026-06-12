@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View, Text, TextInput, SectionList, ActivityIndicator,
-  TouchableOpacity, StyleSheet, Image, Modal, ScrollView,
+  TouchableOpacity, StyleSheet, Image,
 } from "react-native";
 import {
   fetchData, fetchIconPaths, resolveIconUrl, qualityInfo,
@@ -11,15 +11,10 @@ import {
 const LOCALES = ["en-US", "th-TH", "zh-TW"];
 const Q_FILTERS = [6, 5, 4, 3, 2];
 
-function Row({ item, iconUrl, onPress }: { item: NormItem; iconUrl: string | null; onPress: () => void }) {
+function Row({ item, iconUrl }: { item: NormItem; iconUrl: string | null }) {
   const q = qualityInfo(item.quality);
-  const preview = item.effects?.length
-    ? item.effects
-    : (item.details || []).slice(0, 2).map((d) => `${d.label}: ${d.value}`);
   return (
-    <TouchableOpacity activeOpacity={0.75}
-      style={[styles.row, q && { borderLeftColor: q.color, borderLeftWidth: 4 }]}
-      onPress={onPress}>
+    <View style={[styles.row, q && { borderLeftColor: q.color, borderLeftWidth: 4 }]}>
       <View style={styles.iconWrap}>
         {iconUrl ? (
           <Image source={{ uri: iconUrl }} style={styles.icon} resizeMode="contain" />
@@ -36,60 +31,11 @@ function Row({ item, iconUrl, onPress }: { item: NormItem; iconUrl: string | nul
             </View>
           )}
         </View>
-        {preview.map((line, i) => (
-          <Text key={i} style={styles.effect} numberOfLines={2}>{line}</Text>
+        {(item.effects || []).map((line, i) => (
+          <Text key={i} style={styles.effect} numberOfLines={3}>{line}</Text>
         ))}
       </View>
-    </TouchableOpacity>
-  );
-}
-
-function DetailModal({ item, iconUrl, onClose }: {
-  item: NormItem; iconUrl: string | null; onClose: () => void;
-}) {
-  const q = qualityInfo(item.quality);
-  return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalBg}>
-        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
-        <View style={styles.modalCard}>
-          <View style={styles.modalHandle} />
-          <View style={styles.modalHeader}>
-            <View style={styles.modalIconWrap}>
-              {iconUrl
-                ? <Image source={{ uri: iconUrl }} style={styles.modalIcon} resizeMode="contain" />
-                : <View style={[styles.modalIcon, styles.iconFallback]} />}
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.modalTitle}>{item.title}</Text>
-              {item.subtitle ? <Text style={styles.modalSub}>{item.subtitle}</Text> : null}
-              {q && <View style={[styles.badge, { backgroundColor: q.color, alignSelf: "flex-start", marginTop: 4 }]}>
-                <Text style={styles.badgeText}>{q.label}</Text>
-              </View>}
-            </View>
-          </View>
-          <ScrollView style={{ marginTop: 8 }} contentContainerStyle={{ paddingBottom: 16 }}>
-            {(item.effects || []).map((line, i) => (
-              <Text key={i} style={styles.modalEffect}>{line}</Text>
-            ))}
-            {(item.details || []).length > 0 && (
-              <View style={styles.detailTable}>
-                {(item.details || []).map((d, i) => (
-                  <View key={i} style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>{d.label}</Text>
-                    <Text style={styles.detailValue}>{d.value}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-            {item.story ? <Text style={styles.story}>{item.story}</Text> : null}
-          </ScrollView>
-          <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
-            <Text style={styles.closeText}>ปิด</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
+    </View>
   );
 }
 
@@ -124,7 +70,6 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
   const [qFilter, setQFilter] = useState<number | null>(null);
   const [slotFilter, setSlotFilter] = useState<string | null>(null);
   const [subtypeFilter, setSubtypeFilter] = useState<string | null>(null);
-  const [detail, setDetail] = useState<NormItem | null>(null);
 
   const hasQuality = KIND_HAS_QUALITY[kind];
 
@@ -192,7 +137,7 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
   const multiSection = sections.length > 1;
 
   const renderItem = useCallback(({ item }: { item: NormItem }) => (
-    <Row item={item} iconUrl={resolveIconUrl(item, iconPaths)} onPress={() => setDetail(item)} />
+    <Row item={item} iconUrl={resolveIconUrl(item, iconPaths)} />
   ), [iconPaths]);
 
   return (
@@ -212,8 +157,7 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
         placeholderTextColor="#6B7079" value={query} onChangeText={setQuery} />
 
       {slotChips.length > 1 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}
-          style={styles.chipScroll} contentContainerStyle={{ paddingHorizontal: 8 }}>
+        <View style={styles.chipWrapRow}>
           <TouchableOpacity onPress={() => setSlotFilter(null)}
             style={[styles.fChip, slotFilter == null && styles.fChipOn]}>
             <Text style={[styles.fText, slotFilter == null && styles.fTextOn]}>ทั้งหมด</Text>
@@ -227,12 +171,11 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
               </TouchableOpacity>
             );
           })}
-        </ScrollView>
+        </View>
       )}
 
       {subtypeChips.length > 1 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}
-          style={styles.chipScroll} contentContainerStyle={{ paddingHorizontal: 8 }}>
+        <View style={styles.chipWrapRow}>
           <TouchableOpacity onPress={() => setSubtypeFilter(null)}
             style={[styles.fChip, styles.subChip, subtypeFilter == null && styles.fChipOn]}>
             <Text style={[styles.fText, subtypeFilter == null && styles.fTextOn]}>ชนิดทั้งหมด</Text>
@@ -246,7 +189,7 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
               </TouchableOpacity>
             );
           })}
-        </ScrollView>
+        </View>
       )}
 
       {hasQuality && (
@@ -293,16 +236,9 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
           contentContainerStyle={{ paddingVertical: 8, paddingBottom: 16 }}
           initialNumToRender={12}
           windowSize={10}
+          removeClippedSubviews
           ListHeaderComponent={<Text style={styles.count}>{total} items</Text>}
           ListEmptyComponent={<Text style={styles.empty}>no results</Text>}
-        />
-      )}
-
-      {detail && (
-        <DetailModal
-          item={detail}
-          iconUrl={resolveIconUrl(detail, iconPaths)}
-          onClose={() => setDetail(null)}
         />
       )}
     </View>
@@ -348,27 +284,4 @@ const styles = StyleSheet.create({
   retry: { backgroundColor: "#E8B339", paddingHorizontal: 20, paddingVertical: 8, borderRadius: 8 },
   retryText: { color: "#0E0F12", fontWeight: "bold" },
   empty: { color: "#6B7079", textAlign: "center", marginTop: 40 },
-  chipScroll: { paddingTop: 8, flexGrow: 0 },
-  // Detail modal
-  modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.65)", justifyContent: "flex-end" },
-  modalCard: { backgroundColor: "#16181D", borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    paddingHorizontal: 20, paddingTop: 12, paddingBottom: 28, maxHeight: "85%" },
-  modalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: "#2A2E36",
-    alignSelf: "center", marginBottom: 16 },
-  modalHeader: { flexDirection: "row", alignItems: "flex-start", marginBottom: 8 },
-  modalIconWrap: { width: 72, height: 72, borderRadius: 10, backgroundColor: "#0E0F12",
-    alignItems: "center", justifyContent: "center", marginRight: 14 },
-  modalIcon: { width: 60, height: 60 },
-  modalTitle: { color: "#F2F3F5", fontSize: 18, fontWeight: "bold", flexShrink: 1 },
-  modalSub: { color: "#8A8F99", fontSize: 13, marginTop: 2 },
-  modalEffect: { color: "#C7CBD1", fontSize: 14, lineHeight: 20, marginBottom: 4 },
-  detailTable: { marginTop: 12, borderTopWidth: 1, borderTopColor: "#23262D" },
-  detailRow: { flexDirection: "row", justifyContent: "space-between",
-    paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#23262D" },
-  detailLabel: { color: "#8A8F99", fontSize: 13, flex: 1 },
-  detailValue: { color: "#F2F3F5", fontSize: 13, fontWeight: "bold", textAlign: "right", flex: 1 },
-  story: { color: "#6B7079", fontSize: 13, fontStyle: "italic", marginTop: 16, lineHeight: 20 },
-  closeBtn: { marginTop: 16, backgroundColor: "#23262D", borderRadius: 10,
-    paddingVertical: 12, alignItems: "center" },
-  closeText: { color: "#F2F3F5", fontSize: 15, fontWeight: "bold" },
 });

@@ -492,7 +492,7 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
 
   if (kind === "skills") {
     const d = await getJSON(BASE_DATA + "/skill-simulator/data/skills_index_" + locale + ".json");
-    const jmap: any = d.jobs || d || {};
+    const jmap: any = d.jobs || {};
     // walk parent links to build the evolution path (root → ... → job)
     const pathOf = (j: any): string => {
       const names: string[] = [];
@@ -564,7 +564,6 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
     const vals = d.baseItems ? Object.values(d.baseItems) : [];
     items = (vals as any[]).map((r) => ({
       id: r.id, title: r.filterName || r.name || String(r.id), quality: r.quality,
-      iconName: r.icon || undefined,
       details: [r.element && { label: "Element", value: String(r.element) }].filter(Boolean) as DetailRow[],
       tags: {},
     }));

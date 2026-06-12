@@ -299,17 +299,16 @@ function pickPreset(jobName: string): Preset {
   return PRESETS.find((p) => p.match.some((m) => n.includes(m))) || GENERIC_PRESET;
 }
 
-// Spend points focused on the build's CORE stats (the ones with explicit
-// targets, e.g. DEX/AGI/LUK for ADL). Round-robin among those for max DPS, and
-// do NOT leak points into stats the build doesn't want (VIT/INT for ADL).
+// Spend all available points following the preset's stat order (respecting cost).
 function planAllocate(level: number, preset: Preset): Record<string, number> {
   const stats = freshStats();
   let pts = pointsForLevel(level);
-  const targeted = Object.keys(preset.targets || {});
-  const core = targeted.length ? targeted : preset.statOrder.slice(0, 3);
-  const order = preset.statOrder.filter((k) => core.includes(k)); // keep priority order
+  const order = preset.statOrder;
   const target = (k: string) => preset.targets?.[k] ?? 120;
-  // round-robin among core stats up to their targets
+  // Round-robin: add 1 point to each stat in priority order each pass. This
+  // SPREADS points (e.g. DEX + AGI + LUK for a Sniper) to maximize DPS — attack
+  // speed (AGI) + crit (LUK) + hit/ranged-ATK (DEX) — instead of dumping every
+  // point into one stat (which only maximizes damage-per-hit, not DPS).
   let advanced = true;
   while (advanced && pts > 0) {
     advanced = false;
@@ -320,7 +319,7 @@ function planAllocate(level: number, preset: Preset): Record<string, number> {
       stats[k] += 1; pts -= c; advanced = true;
     }
   }
-  // leftover: top up the same core stats up to 120 (still no VIT/INT leak)
+  // leftover points: round-robin top-up up to 120 across the same order
   advanced = true;
   while (advanced && pts > 0) {
     advanced = false;
@@ -346,7 +345,7 @@ const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
       { name: "ADL (ออโต้)", statOrder: ["DEX", "AGI", "LUK", "VIT", "INT"], targets: { DEX: 110, AGI: 120, LUK: 110 },
         skillBoost: ["strafe", "double", "arrow", "true sight", "concentration", "owl", "vulture", "sharp", "สเตรฟ", "ลูกศร", "แม่นยำ"] },
       { name: "สายนก (Falcon)", statOrder: ["DEX", "LUK", "AGI", "INT", "VIT"], targets: { DEX: 110, LUK: 120, AGI: 80 },
-        skillBoost: ["falcon", "blitz", "เหยี่ยว", "นก", "beat", "assault", "crow", "steel crow"] },
+        skillBoost: ["falcon", "blitz", "เหยี่ยว", "นก", "beat", "assault"] },
       { name: "สายกับดัก (Trap)", statOrder: ["DEX", "INT", "VIT", "AGI", "LUK"], targets: { DEX: 110, INT: 90, VIT: 80 },
         skillBoost: ["trap", "กับดัก", "claymore", "blast", "land mine", "sandman", "ankle", "freezing", "flasher", "ทราป"] },
     ],
@@ -560,9 +559,9 @@ function tierPool(idx: number): number {
 }
 
 /* ---- real skill planner (loads the live skill tree per job) ---- */
-function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, avoidKeywords, autoApply, onClose }: {
+function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, autoApply, onClose }: {
   locale: string; iconPaths: IconPaths | null; initialJobName?: string;
-  boostKeywords?: string[]; avoidKeywords?: string[]; autoApply?: boolean; onClose: () => void;
+  boostKeywords?: string[]; autoApply?: boolean; onClose: () => void;
 }) {
   const [index, setIndex] = useState<Record<number, JobNode> | null>(null);
   const [target, setTarget] = useState<number | null>(null);
@@ -734,10 +733,6 @@ function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, avoidK
             return (Number.isFinite(a) && a !== 0) || (Number.isFinite(b) && b !== 0);
           });
           const nm = s.name.toLowerCase();
-          const boosted = !!(boostKeywords && boostKeywords.some((k) => nm.includes(k.toLowerCase())));
-          // skip skills that belong to a DIFFERENT sub-build (e.g. Falcon/Trap
-          // skills when ADL is chosen) so points aren't wasted off-build.
-          if (!boosted && avoidKeywords && avoidKeywords.some((k) => nm.includes(k.toLowerCase()))) return;
           let score: number;
           if (s.passive) {
             score = 120;
@@ -748,7 +743,7 @@ function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, avoidK
             score = 110;                 // buffs / utility actives (still above damage)
           }
           score += tier * 6;
-          if (boosted) score += 250;
+          if (boostKeywords && boostKeywords.some((k) => nm.includes(k.toLowerCase()))) score += 250;
           items.push({ kindId: s.kindId, nat: s.naturalMax, score });
         });
       });
@@ -968,17 +963,6 @@ export default function CharacterScreen() {
   const [variantIdx, setVariantIdx] = useState(0);
   useEffect(() => { setVariantIdx(0); }, [build.job]);
   const activeVariant = variants[variantIdx];
-  // skills belonging to the OTHER sub-builds of this class line — used to keep
-  // the auto skill plan from spending points off-build (e.g. ADL → avoid
-  // Falcon/Trap skills). Shared keywords (used by the active variant too) drop out.
-  const avoidKeywords = useMemo(() => {
-    if (!activeVariant) return [];
-    const set = new Set<string>();
-    variants.filter((v) => v !== activeVariant)
-      .forEach((v) => v.skillBoost.forEach((k) => set.add(k.toLowerCase())));
-    activeVariant.skillBoost.forEach((k) => set.delete(k.toLowerCase()));
-    return Array.from(set);
-  }, [variants, activeVariant]);
   // recommended stat spread for the CURRENT level + chosen build line — i.e. the
   // stats you should be raising right now (updates as the level changes).
   const recStats = useMemo(() => {
@@ -1315,7 +1299,7 @@ export default function CharacterScreen() {
       )}
       {picker && picker.kind === "skillplan" && (
         <SkillPlanner locale={locale} iconPaths={iconPaths} initialJobName={build.job?.title}
-          boostKeywords={activeVariant?.skillBoost} avoidKeywords={avoidKeywords} autoApply onClose={() => setPicker(null)} />
+          boostKeywords={activeVariant?.skillBoost} autoApply onClose={() => setPicker(null)} />
       )}
     </View>
   );
