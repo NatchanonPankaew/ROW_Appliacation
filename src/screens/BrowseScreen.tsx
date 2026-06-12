@@ -14,7 +14,7 @@ const Q_FILTERS = [6, 5, 4, 3, 2];
 function Row({ item, iconUrl, onPress }: { item: NormItem; iconUrl: string | null; onPress: () => void }) {
   const q = qualityInfo(item.quality);
   const preview = item.effects?.length
-    ? item.effects
+    ? item.effects.slice(0, 2)
     : (item.details || []).slice(0, 2).map((d) => `${d.label}: ${d.value}`);
   return (
     <TouchableOpacity activeOpacity={0.75}
@@ -324,7 +324,7 @@ const styles = StyleSheet.create({
   fChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999, margin: 4,
     borderWidth: 1, borderColor: "#2A2E36", backgroundColor: "#16181D" },
   fChipOn: { backgroundColor: "#C7CBD1", borderColor: "#C7CBD1" },
-  fText: { color: "#C7CBD1", fontSize: 13, fontWeight: "bold", lineHeight: 18 },
+  fText: { color: "#C7CBD1", fontSize: 13, fontWeight: "bold" },
   fTextOn: { color: "#0E0F12", fontWeight: "bold" },
   count: { color: "#6B7079", fontSize: 12, marginLeft: 18, marginVertical: 4 },
   sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between",

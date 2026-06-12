@@ -303,8 +303,8 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
   if (kind === "cards") {
     const d = await getJSON(BASE_DATA + "/card-simulator/data/handbook_cards_" + locale + ".json");
     items = (d.cards || []).map((c: any) => {
-      const effects = (c.effect_lines || [c.effect]).filter(Boolean);
-      if (c.effect_extra) effects.push(c.effect_extra);
+      const effects = [...new Set((c.effect_lines || [c.effect]).filter(Boolean) as string[])];
+      if (c.effect_extra && !effects.includes(c.effect_extra)) effects.push(c.effect_extra);
 
       return {
         id: c.id,
