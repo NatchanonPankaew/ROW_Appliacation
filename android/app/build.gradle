@@ -89,8 +89,8 @@ android {
         applicationId "com.nutyey.mimir"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 7
-        versionName "1.0.5"
+        versionCode 11
+        versionName "1.0.10"
     }
 
     signingConfigs {

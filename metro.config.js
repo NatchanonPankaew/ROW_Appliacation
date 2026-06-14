@@ -1,11 +1,7 @@
-const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
+// Use Expo's Metro config so the same bundler serves native (Android/iOS) and
+// web. @expo/metro-config is a superset of @react-native/metro-config.
+const { getDefaultConfig } = require('expo/metro-config');
 
-/**
- * Metro configuration
- * https://reactnative.dev/docs/metro
- *
- * @type {import('@react-native/metro-config').MetroConfig}
- */
-const config = {};
+const config = getDefaultConfig(__dirname);
 
-module.exports = mergeConfig(getDefaultConfig(__dirname), config);
+module.exports = config;
