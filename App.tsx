@@ -6,9 +6,13 @@ import {
 import BrowseScreen from "./src/screens/BrowseScreen";
 import CharacterScreen from "./src/screens/CharacterScreen";
 import SkillsScreen from "./src/screens/SkillsScreen";
+import SupportScreen from "./src/screens/SupportScreen";
 import { Kind } from "./src/api/roworlddb";
 
-const TABS: { key: Kind; label: string }[] = [
+// "support" is an app-only tab (YouTube + donate), not a dataset Kind.
+type TabKey = Kind | "support";
+
+const TABS: { key: TabKey; label: string }[] = [
   { key: "character", label: "Character" },
   { key: "cards", label: "Cards" },
   { key: "equipment", label: "Equip" },
@@ -19,11 +23,12 @@ const TABS: { key: Kind; label: string }[] = [
   { key: "maps", label: "Maps" },
   { key: "apocalypse", label: "Apoc" },
   { key: "runes", label: "Runes" },
+  { key: "support", label: "Support" },
 ];
 
 function Main() {
   const insets = useSafeAreaInsets();
-  const [tab, setTab] = useState<Kind>("cards");
+  const [tab, setTab] = useState<TabKey>("cards");
   const active = TABS.find((t) => t.key === tab)!;
 
   return (
@@ -36,6 +41,8 @@ function Main() {
           <CharacterScreen />
         ) : tab === "skills" ? (
           <SkillsScreen />
+        ) : tab === "support" ? (
+          <SupportScreen />
         ) : (
           <BrowseScreen key={tab} kind={tab} />
         )}
