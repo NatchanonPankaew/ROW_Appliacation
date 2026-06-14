@@ -1,0 +1,13 @@
+{
+  // Cloudflare Workers "Static Assets" — serves the Expo web export in ./dist as
+  // a static site (no server code). The dataset (/data) and images (/media) live
+  // under dist too, so everything is same-origin (no CORS).
+  "name": "row-appliacation",
+  "compatibility_date": "2025-06-01",
+  "assets": {
+    "directory": "./dist",
+    // SPA: unknown routes fall back to index.html (real files like /data/* and
+    // /media/* are served directly and always win over this fallback).
+    "not_found_handling": "single-page-application"
+  }
+}
