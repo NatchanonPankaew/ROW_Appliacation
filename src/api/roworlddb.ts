@@ -1,5 +1,10 @@
-﻿const BASE_DATA = "https://roworlddb.com/sea";
-const BASE_IMG = "https://roworlddb.com/media/images/";
+﻿// Self-hosted dataset (mirrored by scripts/sync-data.mjs + sync-images.mjs into
+// ./public). On web we serve from the same origin, so a relative path works and
+// avoids CORS. Native builds have no origin, so set EXPO_PUBLIC_DATA_HOST to the
+// deployed site (e.g. https://mimir.pages.dev) to fetch the same files.
+const HOST = process.env.EXPO_PUBLIC_DATA_HOST ?? "";
+const BASE_DATA = HOST + "/data/sea";
+const BASE_IMG = HOST + "/media/images/";
 
 export type Kind =
   | "character"
@@ -42,6 +47,7 @@ export interface NormItem {
   jobAll?: boolean;          // usable by every job
   subtypeName?: string;      // weapon/armor subtype label (e.g. "ดาบสองมือ")
   twoHanded?: boolean;       // weapon occupies the off-hand slot too
+  reqLevel?: number;         // level required to equip (from openLevel)
 }
 
 export interface JobOpt { id: number; name: string; icon?: string; }
@@ -141,7 +147,11 @@ export function resolveIconUrl(item: NormItem, iconPaths?: IconPaths | null): st
     return BASE_IMG + iconPaths[item.iconName];
   }
   if (item.iconUrl) {
-    return item.iconUrl.startsWith("http") ? item.iconUrl : BASE_IMG + item.iconUrl;
+    if (item.iconUrl.startsWith("http")) return item.iconUrl;
+    // server-absolute path like "/media/images/pet/x.webp" -> prefix the host
+    // root, not BASE_IMG (which would double up the /media/images/ segment)
+    if (item.iconUrl.startsWith("/")) return HOST + item.iconUrl;
+    return BASE_IMG + item.iconUrl;
   }
   return null;
 }
@@ -383,6 +393,7 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
         jobAll: !!it.jobAll,
         subtypeName,
         twoHanded,
+        reqLevel: it.openLevel ? Number(it.openLevel) : undefined,
         tags: {
           quality: qualityTag(it.quality),
           slot: slot || "",
@@ -427,31 +438,60 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
 
   if (kind === "pets") {
     const d = await getJSON(BASE_DATA + "/pet/data/pet_library_" + locale + ".json");
+    const th = locale === "th-TH";
     items = (d.pets || []).map((p: any) => {
-      const skills = (p.combatSkills || [])
-        .map((s: any) => s.name)
-        .filter(Boolean);
+      // quality is an object { quality, name, tag, ... }, not a bare number
+      const qNum = p.quality && typeof p.quality === "object" ? p.quality.quality : p.quality;
+
+      // combat skill names/desc live under combatSkills[].unlocks[].skill — take
+      // the highest unlock (last entry) of each so we show the fully-upgraded form
+      const skillLines: string[] = [];
+      (p.combatSkills || []).forEach((cs: any) => {
+        const unlocks = cs.unlocks || [];
+        const sk = unlocks.length ? unlocks[unlocks.length - 1].skill : null;
+        if (sk && sk.name) {
+          const tag = cs.typeLabel ? "[" + cs.typeLabel + "] " : "";
+          skillLines.push(tag + sk.name + (sk.description ? ": " + stripColorTags(sk.description) : ""));
+        }
+      });
+
+      // owner bonus at max favorability: last levels[] entry that carries attrs.
+      // these are the passive stats the pet grants the PLAYER (the main reason to
+      // raise a pet), distinct from the pet's own battleStats below.
+      const lvls = p.levels || [];
+      let maxAttrs: any[] = [];
+      for (let i = lvls.length - 1; i >= 0; i--) {
+        const a = lvls[i] && lvls[i].skill && lvls[i].skill.attrs;
+        if (a && a.length) { maxAttrs = a; break; }
+      }
+      const bonus = maxAttrs
+        .filter((a: any) => a.target === "player")
+        .map((a: any) => a.name + " " + (a.value >= 0 ? "+" : "") + a.value + (a.isPercentage ? "%" : ""));
+
+      const effects = [...skillLines];
+      if (bonus.length) {
+        effects.unshift((th ? "โบนัสเจ้าของ (สูงสุด): " : "Owner bonus (max): ") + bonus.join(", "));
+      }
+
+      // battleStats is { level, stats: { atk, def, ... } } — read the inner stats
+      const bs = (p.battleStats && p.battleStats.stats) || {};
 
       return {
         id: p.id,
         title: p.name,
-        subtitle: p.maxLevel
-          ? "Max Lv." + p.maxLevel
-          : undefined,
+        subtitle: p.maxLevel ? "Max Lv." + p.maxLevel : undefined,
 
         iconName: p.icon,
         iconUrl: p.iconUrl,
-        quality: p.quality,
+        quality: qNum,
 
-        effects: skills.length
-          ? ["Skills: " + skills.join(", ")]
-          : [],
+        effects,
 
-        details: statRows(p.battleStats),
-        stats: numStats(p.battleStats),
+        details: statRows(bs),
+        stats: numStats(bs),
 
         tags: {
-          quality: qualityTag(p.quality),
+          quality: qualityTag(qNum),
         },
       };
     });
@@ -561,14 +601,68 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
 
   if (kind === "runes") {
     const d = await getJSON(BASE_DATA + "/skill-simulator/data/engine_runes_" + locale + ".json");
+    const elements = d.elements || {};
+    const packages = d.effectPackages || {};   // pkgId -> [{ effectId, needLevel, weight }]
+    const configs = d.effectConfigs || {};      // effectId -> { name, desc, level, color }
+    // rune baseItems carry no icon field; map the element to its elemental-stone
+    // icon (these keys exist in icon_paths.json). Lumina/holy has no stone icon.
+    const ELEMENT_ICON: Record<number, string> = {
+      1: "icon_elementstone_wind_01",   // Gale
+      2: "icon_elementstone_land_01",   // Geo
+      3: "icon_elementstone_water_01",  // Aqua
+      4: "icon_elementstone_fire_01",   // Pyro
+    };
     const vals = d.baseItems ? Object.values(d.baseItems) : [];
-    items = (vals as any[]).map((r) => ({
-      id: r.id, title: r.filterName || r.name || String(r.id), quality: r.quality,
-      iconName: r.icon || undefined,
-      details: [r.element && { label: "Element", value: String(r.element) }].filter(Boolean) as DetailRow[],
-      tags: {},
-    }));
-    return { items, filters: [] };
+    items = (vals as any[]).map((r) => {
+      const el = elements[r.element] || elements[String(r.element)];
+      const elName = (el && el.name) || r.filterName;
+
+      // resonance: set-bonus lines keyed by piece count (2 / 4 / 7). This is the
+      // meaningful rune info; the raw element id alone isn't useful.
+      const reso = (el && el.resonance) || {};
+      const effects: string[] = [];
+      Object.keys(reso)
+        .sort((a, b) => Number(a) - Number(b))
+        .forEach((cnt) => {
+          (reso[cnt] || []).forEach((ln: string, i: number) => {
+            const head = i === 0 ? "[" + cnt + (locale === "th-TH" ? " ชิ้น" : " pcs") + "] " : "";
+            effects.push(head + stripColorTags(ln));
+          });
+        });
+
+      // rollable ember effects: effectLibrary -> effectPackages -> effectConfigs.
+      // the rune's quality fixes the ember level (needLevel), so group by level.
+      const byLevel: Record<number, string[]> = {};
+      Object.keys(r.effectLibrary || {}).forEach((pkgId) => {
+        (packages[pkgId] || []).forEach((e: any) => {
+          const cfg = configs[String(e.effectId)] || configs[e.effectId];
+          if (!cfg) return;
+          (byLevel[e.needLevel] ||= []).push(cfg.name + ": " + stripColorTags(cfg.desc));
+        });
+      });
+      Object.keys(byLevel)
+        .sort((a, b) => Number(a) - Number(b))
+        .forEach((lvl) => {
+          effects.push((locale === "th-TH" ? "— เอ็มเบอร์สุ่มได้ (Lv." : "— Random Ember (Lv.") + lvl + ") —");
+          Array.from(new Set(byLevel[Number(lvl)])).forEach((line) => effects.push("• " + line));
+        });
+
+      return {
+        id: r.id,
+        title: r.filterName || elName || String(r.id),
+        subtitle: elName,
+        quality: r.quality,
+        iconName: r.icon || ELEMENT_ICON[r.element] || undefined,
+        effects,
+        details: elName ? [{ label: locale === "th-TH" ? "ธาตุ" : "Element", value: elName }] : [],
+        tags: { quality: qualityTag(r.quality), element: elName || "" },
+      };
+    });
+    const filters = [
+      buildFilter("element", locale === "th-TH" ? "ธาตุ" : "Element", items),
+      buildFilter("quality", locale === "th-TH" ? "คุณภาพ" : "Quality", items),
+    ].filter(Boolean) as FilterDef[];
+    return { items, filters };
   }
 
   return { items: [], filters: [] };

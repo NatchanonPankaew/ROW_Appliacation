@@ -1,4 +1,17 @@
 {
   "name": "MyApp",
-  "displayName": "Mimir"
+  "displayName": "Mimir",
+  "expo": {
+    "name": "Mimir",
+    "slug": "mimir",
+    "scheme": "mimir",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0E0F12",
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    }
+  }
 }

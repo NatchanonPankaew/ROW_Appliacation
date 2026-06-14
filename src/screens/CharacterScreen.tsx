@@ -1029,7 +1029,9 @@ export default function CharacterScreen() {
       if (v <= 1) return b; return { ...b, stats: { ...b.stats, [k]: v - 1 } };
     });
 
-  // items to show in the slot picker: matching slot, filtered by the selected class
+  // items to show in the slot picker: matching slot, filtered by the selected
+  // class (jobLimits) AND the character's level (reqLevel) — only gear this
+  // job can actually equip at this class level shows up.
   const pickerSlotItems = (k?: string): NormItem[] => {
     if (!k) return [];
     let m = bySlot[k] || [];
@@ -1039,6 +1041,8 @@ export default function CharacterScreen() {
       const hasJobInfo = m.some((it) => it.jobAll || (it.jobLimits && it.jobLimits.length));
       if (hasJobInfo) m = m.filter((it) => it.jobAll || (it.jobLimits || []).includes(jid));
     }
+    // class-level gate: hide gear whose required level exceeds the build level
+    m = m.filter((it) => it.reqLevel == null || it.reqLevel <= build.level);
     return m;
   };
 

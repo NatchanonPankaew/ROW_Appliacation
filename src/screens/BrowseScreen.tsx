@@ -5,7 +5,7 @@ import {
 } from "react-native";
 import {
   fetchData, fetchIconPaths, resolveIconUrl, qualityInfo,
-  QUALITY, KIND_HAS_QUALITY, NormItem, IconPaths, Kind, slotOrder,
+  QUALITY, KIND_HAS_QUALITY, NormItem, IconPaths, Kind, slotOrder, JobOpt, DetailRow,
 } from "../api/roworlddb";
 
 const LOCALES = ["en-US", "th-TH", "zh-TW"];
@@ -44,10 +44,33 @@ function Row({ item, iconUrl, onPress }: { item: NormItem; iconUrl: string | nul
   );
 }
 
-function DetailModal({ item, iconUrl, onClose }: {
-  item: NormItem; iconUrl: string | null; onClose: () => void;
+function DetailModal({ item, iconUrl, locale, jobNames, onClose }: {
+  item: NormItem; iconUrl: string | null;
+  locale?: string; jobNames?: Record<number, string>; onClose: () => void;
 }) {
   const q = qualityInfo(item.quality);
+  const th = locale === "th-TH";
+  const L = (t: string, e: string) => (th ? t : e);
+
+  // equipment-specific facts (weapon subtype, usable jobs, two-handed, level,
+  // per-refine bonus). Only present on equipment items, so this block is empty
+  // for cards / pets / etc. and renders nothing.
+  const meta: DetailRow[] = [];
+  if (item.subtypeName) {
+    meta.push({
+      label: L("ชนิด", "Type"),
+      value: item.subtypeName + (item.twoHanded ? L(" (สองมือ)", " (2-handed)") : ""),
+    });
+  }
+  if (item.reqLevel) meta.push({ label: L("เลเวล", "Level"), value: String(item.reqLevel) });
+  if (item.jobAll) {
+    meta.push({ label: L("อาชีพ", "Jobs"), value: L("ทุกอาชีพ", "All jobs") });
+  } else if (item.jobLimits && item.jobLimits.length) {
+    const names = item.jobLimits.map((id) => jobNames?.[id]).filter(Boolean) as string[];
+    if (names.length) meta.push({ label: L("อาชีพ", "Jobs"), value: names.join(", ") });
+  }
+  const refine = Object.entries(item.refineStats || {});
+
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.modalBg}>
@@ -69,6 +92,16 @@ function DetailModal({ item, iconUrl, onClose }: {
             </View>
           </View>
           <ScrollView style={{ marginTop: 8 }} contentContainerStyle={{ paddingBottom: 16 }}>
+            {meta.length > 0 && (
+              <View style={styles.metaBox}>
+                {meta.map((m, i) => (
+                  <View key={i} style={styles.metaRow}>
+                    <Text style={styles.metaLabel}>{m.label}</Text>
+                    <Text style={styles.metaValue}>{m.value}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
             {(item.effects || []).map((line, i) => (
               <Text key={i} style={styles.modalEffect}>{line}</Text>
             ))}
@@ -78,6 +111,17 @@ function DetailModal({ item, iconUrl, onClose }: {
                   <View key={i} style={styles.detailRow}>
                     <Text style={styles.detailLabel}>{d.label}</Text>
                     <Text style={styles.detailValue}>{d.value}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            {refine.length > 0 && (
+              <View style={styles.detailTable}>
+                <Text style={styles.refineHead}>{L("โบนัสต่อการตี +1", "Bonus per +1 refine")}</Text>
+                {refine.map(([name, val], i) => (
+                  <View key={i} style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>{name}</Text>
+                    <Text style={styles.detailValue}>{val > 0 ? "+" : ""}{val}</Text>
                   </View>
                 ))}
               </View>
@@ -117,6 +161,7 @@ function groupByType(items: NormItem[]) {
 export default function BrowseScreen({ kind }: { kind: Kind }) {
   const [locale, setLocale] = useState("th-TH");
   const [items, setItems] = useState<NormItem[]>([]);
+  const [jobs, setJobs] = useState<JobOpt[]>([]);
   const [iconPaths, setIconPaths] = useState<IconPaths | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -125,8 +170,11 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
   const [slotFilter, setSlotFilter] = useState<string | null>(null);
   const [subtypeFilter, setSubtypeFilter] = useState<string | null>(null);
   const [detail, setDetail] = useState<NormItem | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const hasQuality = KIND_HAS_QUALITY[kind];
+  const activeFilters =
+    (slotFilter != null ? 1 : 0) + (subtypeFilter != null ? 1 : 0) + (qFilter != null ? 1 : 0);
 
   useEffect(() => { setSlotFilter(null); setQFilter(null); setSubtypeFilter(null); }, [kind]);
   useEffect(() => { setSubtypeFilter(null); }, [slotFilter]);
@@ -137,6 +185,7 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
     try {
       const [data, icons] = await Promise.all([fetchData(kind, loc), fetchIconPaths()]);
       setItems(data.items);          // <- this was missing before
+      setJobs(data.jobs || []);
       setIconPaths(icons);
     } catch (e: any) {
       setError(e.message || "load failed");
@@ -191,6 +240,13 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
   const total = useMemo(() => sections.reduce((n, s) => n + s.data.length, 0), [sections]);
   const multiSection = sections.length > 1;
 
+  // job id -> name, so the detail modal can show "usable by" job names instead of ids
+  const jobNames = useMemo(() => {
+    const m: Record<number, string> = {};
+    jobs.forEach((j) => { m[j.id] = j.name; });
+    return m;
+  }, [jobs]);
+
   const renderItem = useCallback(({ item }: { item: NormItem }) => (
     <Row item={item} iconUrl={resolveIconUrl(item, iconPaths)} onPress={() => setDetail(item)} />
   ), [iconPaths]);
@@ -211,9 +267,21 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
       <TextInput style={styles.search} placeholder="ค้นหาชื่อ/ความสามารถ เช่น กันสตัน ป้องกันไฟ"
         placeholderTextColor="#6B7079" value={query} onChangeText={setQuery} />
 
+      {(slotChips.length > 1 || subtypeChips.length > 1 || hasQuality) && (
+        <TouchableOpacity style={styles.filterToggle} activeOpacity={0.7}
+          onPress={() => setFiltersOpen((o) => !o)}>
+          <Text style={styles.filterToggleText}>
+            ตัวกรอง{activeFilters ? ` (${activeFilters})` : ""}
+          </Text>
+          <Text style={styles.filterToggleIcon}>{filtersOpen ? "▲" : "▼"}</Text>
+        </TouchableOpacity>
+      )}
+
+      {filtersOpen && (
+      <ScrollView style={styles.filterArea} nestedScrollEnabled
+        contentContainerStyle={styles.filterAreaContent}>
       {slotChips.length > 1 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}
-          style={styles.chipScroll} contentContainerStyle={{ paddingHorizontal: 8 }}>
+        <View style={styles.filterRow}>
           <TouchableOpacity onPress={() => setSlotFilter(null)}
             style={[styles.fChip, slotFilter == null && styles.fChipOn]}>
             <Text style={[styles.fText, slotFilter == null && styles.fTextOn]}>ทั้งหมด</Text>
@@ -227,12 +295,11 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
               </TouchableOpacity>
             );
           })}
-        </ScrollView>
+        </View>
       )}
 
       {subtypeChips.length > 1 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}
-          style={styles.chipScroll} contentContainerStyle={{ paddingHorizontal: 8 }}>
+        <View style={styles.filterRow}>
           <TouchableOpacity onPress={() => setSubtypeFilter(null)}
             style={[styles.fChip, styles.subChip, subtypeFilter == null && styles.fChipOn]}>
             <Text style={[styles.fText, subtypeFilter == null && styles.fTextOn]}>ชนิดทั้งหมด</Text>
@@ -246,7 +313,7 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
               </TouchableOpacity>
             );
           })}
-        </ScrollView>
+        </View>
       )}
 
       {hasQuality && (
@@ -265,6 +332,8 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
             );
           })}
         </View>
+      )}
+      </ScrollView>
       )}
 
       {loading ? (
@@ -302,6 +371,8 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
         <DetailModal
           item={detail}
           iconUrl={resolveIconUrl(detail, iconPaths)}
+          locale={locale}
+          jobNames={jobNames}
           onClose={() => setDetail(null)}
         />
       )}
@@ -318,13 +389,27 @@ const styles = StyleSheet.create({
   localeTextOn: { color: "#0E0F12" },
   search: { marginHorizontal: 16, marginTop: 8, backgroundColor: "#16181D", color: "#F2F3F5",
     borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15 },
+  // collapsible filter: a tappable bar toggles the chip area open/closed so it
+  // doesn't permanently eat screen space. Active filter count shown in the label.
+  filterToggle: { flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    marginHorizontal: 16, marginTop: 10, paddingHorizontal: 14, paddingVertical: 10,
+    borderRadius: 10, backgroundColor: "#16181D", borderWidth: 1, borderColor: "#2A2E36" },
+  filterToggleText: { color: "#C7CBD1", fontSize: 14, fontWeight: "bold" },
+  filterToggleIcon: { color: "#8A8F99", fontSize: 12, fontWeight: "bold" },
+  // filter chips live in their own vertical scroll area so many chips (esp.
+  // equipment slots + subtypes) stay capped in height and scroll instead of
+  // pushing the list down. maxHeight ≈ 3 rows of chips.
+  filterArea: { flexGrow: 0, maxHeight: 168 },
+  filterAreaContent: { paddingBottom: 4 },
   filterRow: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 12, marginTop: 10 },
   chipWrapRow: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 8, paddingTop: 8 },
   subChip: { backgroundColor: "#0E0F12" },
-  fChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999, margin: 4,
+  fChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, margin: 4,
     borderWidth: 1, borderColor: "#2A2E36", backgroundColor: "#16181D" },
   fChipOn: { backgroundColor: "#C7CBD1", borderColor: "#C7CBD1" },
-  fText: { color: "#C7CBD1", fontSize: 13, fontWeight: "bold" },
+  // lineHeight must be generous enough for Thai upper vowels/tone marks (เช่น "ทั้งหมด")
+  // or Android clips them; includeFontPadding keeps the top marks inside the line box.
+  fText: { color: "#C7CBD1", fontSize: 13, fontWeight: "bold", lineHeight: 20, includeFontPadding: true },
   fTextOn: { color: "#0E0F12", fontWeight: "bold" },
   count: { color: "#6B7079", fontSize: 12, marginLeft: 18, marginVertical: 4 },
   sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between",
@@ -349,6 +434,7 @@ const styles = StyleSheet.create({
   retryText: { color: "#0E0F12", fontWeight: "bold" },
   empty: { color: "#6B7079", textAlign: "center", marginTop: 40 },
   chipScroll: { paddingTop: 8, flexGrow: 0 },
+  chipScrollContent: { paddingHorizontal: 8, alignItems: "center" },
   // Detail modal
   modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.65)", justifyContent: "flex-end" },
   modalCard: { backgroundColor: "#16181D", borderTopLeftRadius: 20, borderTopRightRadius: 20,
@@ -362,6 +448,14 @@ const styles = StyleSheet.create({
   modalTitle: { color: "#F2F3F5", fontSize: 18, fontWeight: "bold", flexShrink: 1 },
   modalSub: { color: "#8A8F99", fontSize: 13, marginTop: 2 },
   modalEffect: { color: "#C7CBD1", fontSize: 14, lineHeight: 20, marginBottom: 4 },
+  // equipment facts block (type / jobs / level …) shown above the stat table
+  metaBox: { backgroundColor: "#0E0F12", borderRadius: 10, paddingHorizontal: 12,
+    paddingVertical: 4, marginBottom: 10 },
+  metaRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start",
+    paddingVertical: 6 },
+  metaLabel: { color: "#8A8F99", fontSize: 13, marginRight: 12 },
+  metaValue: { color: "#E8B339", fontSize: 13, fontWeight: "bold", flexShrink: 1, textAlign: "right" },
+  refineHead: { color: "#8A8F99", fontSize: 12, fontWeight: "bold", marginTop: 10, marginBottom: 2 },
   detailTable: { marginTop: 12, borderTopWidth: 1, borderTopColor: "#23262D" },
   detailRow: { flexDirection: "row", justifyContent: "space-between",
     paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#23262D" },

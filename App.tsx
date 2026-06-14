@@ -5,6 +5,7 @@ import {
 } from "react-native-safe-area-context";
 import BrowseScreen from "./src/screens/BrowseScreen";
 import CharacterScreen from "./src/screens/CharacterScreen";
+import SkillsScreen from "./src/screens/SkillsScreen";
 import { Kind } from "./src/api/roworlddb";
 
 const TABS: { key: Kind; label: string }[] = [
@@ -33,6 +34,8 @@ function Main() {
       <View style={styles.screen}>
         {tab === "character" ? (
           <CharacterScreen />
+        ) : tab === "skills" ? (
+          <SkillsScreen />
         ) : (
           <BrowseScreen key={tab} kind={tab} />
         )}
