@@ -1,4 +1,0 @@
-# Cloudflare Pages: serve real files (/data/*, /media/*, /_expo/*) as-is, and
-# fall back to the SPA shell for any other route. Static files always win over
-# this catch-all, so the dataset and images are served directly.
-/*    /index.html    200
