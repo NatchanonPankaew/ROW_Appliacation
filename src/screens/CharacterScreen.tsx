@@ -1201,6 +1201,13 @@ export default function CharacterScreen() {
   const pickerSlotItems = (k?: string): NormItem[] => {
     if (!k) return [];
     let m = bySlot[k] || [];
+    // Assassin lines can dual-wield: the off-hand may hold a second ONE-handed
+    // weapon (dagger), so add one-handed weapons to the off-hand picker.
+    const isDualWield = !!build.job && /assassin|แอส|cross|guillotine|กิโยติน/i.test(build.job.title || "");
+    if (k === "offhand" && isDualWield) {
+      const oneHandWeapons = (bySlot["weapon"] || []).filter((it) => !it.twoHanded);
+      m = [...m, ...oneHandWeapons];
+    }
     if (m.length === 0) m = equipment;            // fallback if slot mapping missed
     const jid = build.job ? Number(build.job.id) : null;
     if (jid != null) {
