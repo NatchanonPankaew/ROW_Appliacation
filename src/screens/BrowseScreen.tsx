@@ -158,6 +158,14 @@ function groupByType(items: NormItem[]) {
     .map((key) => ({ title: labelOf[key] || key, data: map[key] }));
 }
 
+const LEVEL_BUCKETS = [
+  { key: "1-30", label: "Lv.1-30", min: 1, max: 30 },
+  { key: "31-60", label: "Lv.31-60", min: 31, max: 60 },
+  { key: "61-90", label: "Lv.61-90", min: 61, max: 90 },
+  { key: "91-120", label: "Lv.91-120", min: 91, max: 120 },
+  { key: "121+", label: "Lv.121+", min: 121, max: 9999 },
+];
+
 export default function BrowseScreen({ kind }: { kind: Kind }) {
   const [locale, setLocale] = useState("th-TH");
   const [items, setItems] = useState<NormItem[]>([]);
@@ -169,14 +177,18 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
   const [qFilter, setQFilter] = useState<number | null>(null);
   const [slotFilter, setSlotFilter] = useState<string | null>(null);
   const [subtypeFilter, setSubtypeFilter] = useState<string | null>(null);
+  const [levelFilter, setLevelFilter] = useState<string | null>(null);
   const [detail, setDetail] = useState<NormItem | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const hasQuality = KIND_HAS_QUALITY[kind];
+  // level-range filter (monsters carry tags.level)
+  const hasLevel = useMemo(() => items.some((it) => it.tags?.level), [items]);
   const activeFilters =
-    (slotFilter != null ? 1 : 0) + (subtypeFilter != null ? 1 : 0) + (qFilter != null ? 1 : 0);
+    (slotFilter != null ? 1 : 0) + (subtypeFilter != null ? 1 : 0) +
+    (qFilter != null ? 1 : 0) + (levelFilter != null ? 1 : 0);
 
-  useEffect(() => { setSlotFilter(null); setQFilter(null); setSubtypeFilter(null); }, [kind]);
+  useEffect(() => { setSlotFilter(null); setQFilter(null); setSubtypeFilter(null); setLevelFilter(null); }, [kind]);
   useEffect(() => { setSubtypeFilter(null); }, [slotFilter]);
 
   const load = useCallback(async (loc: string) => {
@@ -231,11 +243,16 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
       if (qFilter != null && it.quality !== qFilter) return false;
       if (slotFilter != null && slotKeyOf(it) !== slotFilter) return false;
       if (subtypeFilter != null && it.subtypeName !== subtypeFilter) return false;
+      if (levelFilter != null) {
+        const lv = Number(it.tags?.level);
+        const b = LEVEL_BUCKETS.find((x) => x.key === levelFilter);
+        if (b && !(lv >= b.min && lv <= b.max)) return false;
+      }
       if (tokens.length) { const t = textOf(it); if (!tokens.every((tok) => t.includes(tok))) return false; }
       return true;
     });
     return groupByType(filtered);
-  }, [items, query, qFilter, slotFilter, subtypeFilter]);
+  }, [items, query, qFilter, slotFilter, subtypeFilter, levelFilter]);
 
   const total = useMemo(() => sections.reduce((n, s) => n + s.data.length, 0), [sections]);
   const multiSection = sections.length > 1;
@@ -309,6 +326,24 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
               <TouchableOpacity key={st} onPress={() => setSubtypeFilter(on ? null : st)}
                 style={[styles.fChip, styles.subChip, on && styles.fChipOn]}>
                 <Text style={[styles.fText, on && styles.fTextOn]}>{st}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+
+      {hasLevel && (
+        <View style={styles.filterRow}>
+          <TouchableOpacity onPress={() => setLevelFilter(null)}
+            style={[styles.fChip, levelFilter == null && styles.fChipOn]}>
+            <Text style={[styles.fText, levelFilter == null && styles.fTextOn]}>ทุกเลเวล</Text>
+          </TouchableOpacity>
+          {LEVEL_BUCKETS.map((b) => {
+            const on = levelFilter === b.key;
+            return (
+              <TouchableOpacity key={b.key} onPress={() => setLevelFilter(on ? null : b.key)}
+                style={[styles.fChip, on && styles.fChipOn]}>
+                <Text style={[styles.fText, on && styles.fTextOn]}>{b.label}</Text>
               </TouchableOpacity>
             );
           })}

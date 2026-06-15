@@ -36,7 +36,7 @@ export default function SupportScreen() {
         <Text style={styles.cardTitle}>ติดตามช่อง YouTube</Text>
         <Text style={styles.cardHandle}>{YT_HANDLE}</Text>
         <Text style={styles.cardDesc}>
-          กดติดตามเพื่อไม่พลาดคลิปใหม่ ๆ เกี่ยวกับ Ragnarok Origin และอัปเดตของแอป
+          กดติดตามเพื่อไม่พลาดคลิปใหม่ ๆ เกี่ยวกับ Ragnarok World (ROW) และอัปเดตของแอป
         </Text>
         <TouchableOpacity
           style={styles.ytBtn}

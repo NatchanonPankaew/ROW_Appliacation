@@ -95,4 +95,4 @@ web-build/
 # Expo
 .expo
 dist/
-web-build/
+web-build/android/app/mimir-upload.keystore

@@ -591,17 +591,25 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
       if (m.race_name) details.unshift({ label: "Race", value: m.race_name });
       if (m.element_name) details.unshift({ label: "Element", value: m.element_name });
       details.unshift({ label: "Level", value: String(m.level) });
+      const size = m.body?.name || m.size_name || "";
       return {
         id: m.id, title: m.name,
         subtitle: ["Lv." + m.level, m.race_name, m.element_name].filter(Boolean).join("  -  "),
+        // browse filter dimensions for monsters: element (slot) + size (subtype)
+        slotKey: m.element_name || "อื่นๆ",
+        slot: m.element_name || undefined,
+        subtypeName: size || undefined,
         iconName: m.image, details,
         effects: drops.length ? ["Drops: " + drops.join(", ")] : [],
-        tags: { element: m.element_name || "", race: m.race_name || "" },
+        tags: {
+          element: m.element_name || "", race: m.race_name || "",
+          size, level: String(m.level ?? ""),
+        },
       };
     });
     const filters = [
       buildFilter("element", "Element", items),
-      buildFilter("race", "Race", items),
+      buildFilter("size", "Size", items),
     ].filter(Boolean) as FilterDef[];
     return { items, filters };
   }
