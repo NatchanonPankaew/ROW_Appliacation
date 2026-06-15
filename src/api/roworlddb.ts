@@ -230,6 +230,9 @@ const CARD_STAT_KW: [RegExp, string, string | null][] = [
   [/max\s*sp|sp\s*สูงสุด|\bsp\b|พลังเวทสูงสุด/i, "Max SP", "SP%"],
   [/p\.?def|ป้องกันกาย/i, "P.DEF", null],
   [/m\.?def|ป้องกันเวท/i, "M.DEF", null],
+  [/\bhit\b|命中/i, "Hit", null],
+  [/\bflee\b|หลบ|回避/i, "Flee", null],
+  [/\bcrit\b(?!\s*dmg)|暴擊|暴击/i, "CRIT", null],
 ];
 function parseCardStats(effects: string[]): Record<string, number> {
   const out: Record<string, number> = {};
