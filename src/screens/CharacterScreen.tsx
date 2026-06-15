@@ -778,9 +778,11 @@ function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, avoidK
           });
           const nm = s.name.toLowerCase();
           const boosted = !!(boostKeywords && boostKeywords.some((k) => nm.includes(k.toLowerCase())));
-          // skip skills that belong to a DIFFERENT sub-build (e.g. Falcon/Trap
-          // skills when ADL is chosen) so points aren't wasted off-build.
-          if (!boosted && avoidKeywords && avoidKeywords.some((k) => nm.includes(k.toLowerCase()))) return;
+          // skills belonging to a DIFFERENT sub-build (e.g. Falcon/Trap when ADL
+          // is chosen) are DE-PRIORITIZED, not skipped — otherwise filtering them
+          // out can leave a tier under its 40-pt unlock, stranding the budget and
+          // locking later tiers. They still get filled last, with leftover points.
+          const avoided = !boosted && !!avoidKeywords && avoidKeywords.some((k) => nm.includes(k.toLowerCase()));
           let score: number;
           if (s.passive) {
             score = 120;
@@ -792,6 +794,7 @@ function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, avoidK
           }
           score += tier * 6;
           if (boosted) score += 250;
+          if (avoided) score -= 300;     // last resort: only to unlock tiers / spend leftover
           items.push({ kindId: s.kindId, nat: s.naturalMax, score });
         });
       });
