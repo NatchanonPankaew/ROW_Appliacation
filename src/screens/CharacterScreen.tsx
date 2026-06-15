@@ -1437,19 +1437,38 @@ export default function CharacterScreen() {
           })}
         </View>
 
-        {/* derived combat stats */}
-        <View style={styles.sectionHead}>
-          <Text style={styles.sectionTitle}>ค่ารบ</Text>
-          <Text style={styles.tuneNote}>≈ ปรับสูตรให้ตรงเกมได้</Text>
-        </View>
-        <View style={styles.statBox}>
-          {COMBAT_ROWS.map(([k, label], i) => (
-            <View key={k} style={[styles.statRow, i % 2 === 1 && styles.statRowAlt]}>
-              <Text style={styles.statLabel}>{label}</Text>
-              <Text style={styles.statValue}>{combat[k]}</Text>
+        {/* derived combat stats — 2-column "Base" panel like the game */}
+        <Text style={styles.sectionTitle}>ค่ารบ · Base</Text>
+        <View style={styles.statGrid}>
+          {COMBAT_ROWS.map(([k, label]) => (
+            <View key={k} style={styles.statCell}>
+              <Text style={styles.statCellLabel} numberOfLines={1}>{label}</Text>
+              <Text style={styles.statCellVal}>{combat[k]}</Text>
             </View>
           ))}
         </View>
+        <Text style={styles.tuneNote}>≈ ค่าประมาณจากสูตรในเกม (บางค่าที่เกมคิดจากบั๊ฟไม่มีในข้อมูล)</Text>
+
+        {/* full effect/bonus text of equipped gear (dataset stores these as text) */}
+        {equippedSlots.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>เอฟเฟกต์อุปกรณ์ (ละเอียด)</Text>
+            {equippedSlots.map((s) => {
+              const it = getSlot(s.key).item!;
+              const lines = [
+                ...(it.details || []).map((d) => d.label + "  " + d.value),
+                ...(it.effects || []),
+              ].filter(Boolean);
+              if (!lines.length) return null;
+              return (
+                <View key={s.key} style={styles.fxGroup}>
+                  <Text style={styles.fxName} numberOfLines={1}>{slotLabel(s, locale)} · {it.title}</Text>
+                  {lines.map((t, i) => <Text key={i} style={styles.fxLine}>• {t}</Text>)}
+                </View>
+              );
+            })}
+          </>
+        )}
 
         {/* stat allocation */}
         <View style={styles.sectionHead}>
@@ -1710,6 +1729,16 @@ const styles = StyleSheet.create({
   statLabel: { color: "#5A6781", fontSize: 14, fontWeight: "bold" },
   statValue: { color: "#5566C7", fontSize: 15, fontWeight: "bold" },
   statBonus: { color: "#2FAE73", fontSize: 15, fontWeight: "bold" },
+
+  // 2-column stat grid (game "Base" panel) + equipment effect list
+  statGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
+  statCell: { width: "48.5%", flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    backgroundColor: "#F1F6FC", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 7 },
+  statCellLabel: { color: "#5A6781", fontSize: 13, fontWeight: "bold", flex: 1, marginRight: 6 },
+  statCellVal: { color: "#5566C7", fontSize: 14, fontWeight: "800" },
+  fxGroup: { backgroundColor: "#FFFFFF", borderRadius: 12, borderWidth: 1, borderColor: "#DCE6F4", padding: 10, marginBottom: 8 },
+  fxName: { color: "#5566C7", fontSize: 13, fontWeight: "800", marginBottom: 4 },
+  fxLine: { color: "#5A6781", fontSize: 12, lineHeight: 18 },
 
   allocRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 9 },
   allocRec: { color: "#8A97AD", fontSize: 11, fontWeight: "bold" },
