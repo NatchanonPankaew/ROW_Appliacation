@@ -180,6 +180,34 @@ function numStats(stats: any): Record<string, number> {
   return out;
 }
 
+// Cards store their bonuses as TEXT (e.g. "LUK +4~7", "Atk +9~15"), not numbers.
+// Pull the flat stat bonuses out so the build calculator can sum them. Ranges
+// (a~b) use the upper bound; percentage bonuses (reductions etc.) are skipped.
+const CARD_STAT_KW: [RegExp, string][] = [
+  [/\bstr\b|พละกำลัง|พลังกาย/i, "STR"],
+  [/\bagi\b|ความว่องไว/i, "AGI"],
+  [/\bvit\b|พลังชีวิต/i, "VIT"],
+  [/\bint\b|สติปัญญา/i, "INT"],
+  [/\bdex\b|ความแม่นยำ/i, "DEX"],
+  [/\bluk\b|โชค/i, "LUK"],
+  [/\bm\.?atk\b|พลังเวท/i, "MATK"],
+  [/\bp\.?atk\b|\batk\b|พลังโจมตี/i, "ATK"],
+];
+function parseCardStats(effects: string[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const line of effects || []) {
+    const m = String(line).match(/([^+]*?)\+\s*(\d+)(?:\s*~\s*(\d+))?\s*(%?)/);
+    if (!m || m[4] === "%") continue;          // skip % bonuses (resist/reduction)
+    const name = m[1];
+    const val = Number(m[3] || m[2]);          // upper bound of a range
+    if (!val) continue;
+    for (const [re, key] of CARD_STAT_KW) {
+      if (re.test(name)) { out[key] = (out[key] || 0) + val; break; }
+    }
+  }
+  return out;
+}
+
 // ---- equipment schema helpers (decoded from the live equipment.js) ----
 // item.itemType (numeric code) -> stable slot key
 const ITEM_TYPE_SLOT: Record<number, string> = {
@@ -324,8 +352,8 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
         iconName: c.item_icon,
         quality: c.quality,
 
-        // some cards carry flat numeric bonuses; keep them if present
-        stats: numStats(c.stats),
+        // cards store bonuses as text — parse the flat stat lines so they sum
+        stats: { ...numStats(c.stats), ...parseCardStats(effects) },
         slot: tr(c.card_type_name, locale),
         slotKey: cardSlotKey(c.card_type_name),
 
