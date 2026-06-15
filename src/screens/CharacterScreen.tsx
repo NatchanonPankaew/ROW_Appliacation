@@ -1083,7 +1083,7 @@ function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, avoidK
 
 export default function CharacterScreen() {
   const { width: winW } = useWindowDimensions();
-  const equipCols = winW >= 640 ? 6 : 4;   // PC shows more slots per row than mobile
+  const isWide = winW >= 820;   // PC: two-pane landscape (character | stats)
   const [locale, setLocale] = useState("th-TH");
   const [equipment, setEquipment] = useState<NormItem[]>([]);
   const [cards, setCards] = useState<NormItem[]>([]);
@@ -1253,6 +1253,48 @@ export default function CharacterScreen() {
 
   const equippedSlots = SLOTS.filter((s) => getSlot(s.key).item);
 
+  // paper-doll: character in the center, equipment slots down each side
+  const avatarUrl = build.job ? resolveIconUrl(build.job, iconPaths) : null;
+  const slotByKey = (k: string) => SLOTS.find((s) => s.key === k)!;
+  const LEFT_KEYS = ["head", "face", "mouth", "garment", "back", "accessory1"];
+  const RIGHT_KEYS = ["armor", "weapon", "offhand", "shoes", "accessory2"];
+  const renderSlot = (s: SlotDef) => {
+    const sl = getSlot(s.key);
+    const it = sl.item;
+    const q = it ? qualityInfo(it.quality) : null;
+    const url = it ? resolveIconUrl(it, iconPaths) : null;
+    const locked = s.key === "offhand" && weaponTwoHanded;
+    return (
+      <View key={s.key} style={styles.dollSlot}>
+        <Text style={styles.slotCellLabel} numberOfLines={1}>{slotLabel(s, locale)}</Text>
+        <TouchableOpacity activeOpacity={0.8} disabled={locked}
+          onPress={() => setPicker({ kind: "item", slot: s.key })}
+          style={[styles.slotBox, q && { borderColor: q.color }, locked && styles.slotLocked]}>
+          {locked ? <Text style={styles.slotLockedText}>2มือ</Text>
+            : url ? <Image source={{ uri: url }} style={styles.slotIcon} resizeMode="contain" />
+            : <Text style={styles.slotPlus}>＋</Text>}
+          {!!it && it.reqLevel != null && (
+            <View style={styles.levelBadge}><Text style={styles.levelBadgeText}>{it.reqLevel}</Text></View>
+          )}
+          {!!it && sl.refine > 0 && (
+            <View style={styles.refineBadge}><Text style={styles.refineBadgeText}>+{sl.refine}</Text></View>
+          )}
+          {!!it && (
+            <TouchableOpacity style={styles.slotClear} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              onPress={() => clearSlot(s.key)}><Text style={styles.slotClearText}>×</Text></TouchableOpacity>
+          )}
+        </TouchableOpacity>
+        {it ? (
+          <View style={styles.refineRow}>
+            <TouchableOpacity style={styles.rfBtnSm} onPress={() => setRefine(s.key, -1)}><Text style={styles.rfBtnText}>−</Text></TouchableOpacity>
+            <Text style={styles.refineRowText}>+{sl.refine}</Text>
+            <TouchableOpacity style={styles.rfBtnSm} onPress={() => setRefine(s.key, 1)}><Text style={styles.rfBtnText}>+</Text></TouchableOpacity>
+          </View>
+        ) : <Text style={styles.slotNameEmpty} numberOfLines={1}>{locked ? "ล็อก" : "ว่าง"}</Text>}
+      </View>
+    );
+  };
+
   if (loading) return <View style={[styles.container, styles.center]}><ActivityIndicator size="large" color="#E8B339" /></View>;
   if (error) return (
     <View style={[styles.container, styles.center]}>
@@ -1274,6 +1316,8 @@ export default function CharacterScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
+        <View style={isWide ? styles.twoPane : undefined}>
+        <View style={isWide ? styles.pane : undefined}>
         <View style={styles.levelRow}>
           <Text style={styles.levelLabel}>Lv.</Text>
           <View style={styles.levelCtrl}>
@@ -1353,59 +1397,25 @@ export default function CharacterScreen() {
           {!build.job && <Text style={styles.planHint}>เลือกอาชีพด้านบนเพื่อดูแผนของสายนั้นโดยเฉพาะ</Text>}
         </View>
 
-        {/* equipment — fixed 10 slots */}
+        {/* equipment — paper-doll: character in the center, slots down each side */}
         <Text style={styles.sectionTitle}>อุปกรณ์</Text>
-        {/* RO-style equipment grid: square slot cells with quality-framed icons */}
-        <View style={styles.equipGrid}>
-          {SLOTS.map((s) => {
-            const sl = getSlot(s.key);
-            const it = sl.item;
-            const q = it ? qualityInfo(it.quality) : null;
-            const url = it ? resolveIconUrl(it, iconPaths) : null;
-            const locked = s.key === "offhand" && weaponTwoHanded;
-            return (
-              <View key={s.key} style={[styles.slotCell, { width: `${100 / equipCols}%` }]}>
-                <Text style={styles.slotCellLabel} numberOfLines={1}>{slotLabel(s, locale)}</Text>
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  disabled={locked}
-                  onPress={() => setPicker({ kind: "item", slot: s.key })}
-                  style={[styles.slotBox, q && { borderColor: q.color }, locked && styles.slotLocked]}
-                >
-                  {locked ? (
-                    <Text style={styles.slotLockedText}>2มือ</Text>
-                  ) : url ? (
-                    <Image source={{ uri: url }} style={styles.slotIcon} resizeMode="contain" />
-                  ) : (
-                    <Text style={styles.slotPlus}>＋</Text>
-                  )}
-                  {!!it && it.reqLevel != null && (
-                    <View style={styles.levelBadge}><Text style={styles.levelBadgeText}>{it.reqLevel}</Text></View>
-                  )}
-                  {!!it && sl.refine > 0 && (
-                    <View style={styles.refineBadge}><Text style={styles.refineBadgeText}>+{sl.refine}</Text></View>
-                  )}
-                  {!!it && (
-                    <TouchableOpacity style={styles.slotClear} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                      onPress={() => clearSlot(s.key)}><Text style={styles.slotClearText}>×</Text></TouchableOpacity>
-                  )}
-                </TouchableOpacity>
-                {it ? (
-                  <>
-                    <Text style={[styles.slotName, q && { color: q.color }]} numberOfLines={1}>{it.title}</Text>
-                    <View style={styles.refineRow}>
-                      <TouchableOpacity style={styles.rfBtnSm} onPress={() => setRefine(s.key, -1)}><Text style={styles.rfBtnText}>−</Text></TouchableOpacity>
-                      <Text style={styles.refineRowText}>+{sl.refine}</Text>
-                      <TouchableOpacity style={styles.rfBtnSm} onPress={() => setRefine(s.key, 1)}><Text style={styles.rfBtnText}>+</Text></TouchableOpacity>
-                    </View>
-                  </>
-                ) : (
-                  <Text style={styles.slotNameEmpty} numberOfLines={1}>{locked ? "ล็อก" : "ว่าง"}</Text>
-                )}
-              </View>
-            );
-          })}
+        <View style={styles.paperDoll}>
+          <View style={styles.dollCol}>{LEFT_KEYS.map((k) => renderSlot(slotByKey(k)))}</View>
+          <View style={styles.dollCenter}>
+            <View style={styles.dollAvatarBox}>
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.dollAvatar} resizeMode="contain" />
+              ) : (
+                <Text style={styles.dollAvatarPh}>?</Text>
+              )}
+            </View>
+            <Text style={styles.dollName} numberOfLines={1}>{build.job ? build.job.title : "เลือกอาชีพ"}</Text>
+            <Text style={styles.dollLv}>Lv.{build.level}</Text>
+          </View>
+          <View style={styles.dollCol}>{RIGHT_KEYS.map((k) => renderSlot(slotByKey(k)))}</View>
         </View>
+        </View>{/* end left pane */}
+        <View style={isWide ? styles.pane : undefined}>
 
         {/* total stats */}
         <Text style={styles.sectionTitle}>ค่าสถานะ</Text>
@@ -1523,6 +1533,8 @@ export default function CharacterScreen() {
             </View>
           );
         })}
+        </View>{/* end right pane */}
+        </View>{/* end two-pane */}
       </ScrollView>
 
       {picker && picker.kind === "item" && picker.slot && (
@@ -1674,6 +1686,23 @@ const styles = StyleSheet.create({
   refineRow: { flexDirection: "row", alignItems: "center", marginTop: 2 },
   rfBtnSm: { width: 18, height: 18, borderRadius: 9, backgroundColor: "#EAF1FB", alignItems: "center", justifyContent: "center" },
   refineRowText: { color: "#5566C7", fontSize: 10, fontWeight: "bold", minWidth: 20, textAlign: "center" },
+
+  // two-pane desktop layout (character | stats)
+  twoPane: { flexDirection: "row", alignItems: "flex-start" },
+  pane: { flex: 1, paddingHorizontal: 6 },
+
+  // paper-doll layout (character center, slots on the sides)
+  paperDoll: { flexDirection: "row", alignItems: "flex-start", backgroundColor: "#FFFFFF",
+    borderRadius: 16, borderWidth: 1, borderColor: "#DCE6F4", padding: 10 },
+  dollCol: { width: "29%", alignItems: "center" },
+  dollSlot: { width: "100%", alignItems: "center", marginBottom: 10 },
+  dollCenter: { flex: 1, alignItems: "center", paddingHorizontal: 6, paddingTop: 16 },
+  dollAvatarBox: { width: "100%", aspectRatio: 0.62, borderRadius: 14, backgroundColor: "#EAF2FD",
+    borderWidth: 1, borderColor: "#DCE6F4", alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  dollAvatar: { width: "72%", height: "72%" },
+  dollAvatarPh: { color: "#B7C6E2", fontSize: 44, fontWeight: "800" },
+  dollName: { color: "#41506B", fontSize: 13, fontWeight: "800", marginTop: 8, textAlign: "center" },
+  dollLv: { color: "#8A97AD", fontSize: 11, fontWeight: "bold", marginTop: 1 },
 
   statBox: { backgroundColor: "#FFFFFF", borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: "#DCE6F4" },
   statRow: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 10 },
