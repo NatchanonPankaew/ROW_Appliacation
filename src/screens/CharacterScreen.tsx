@@ -346,18 +346,31 @@ function planAllocate(level: number, preset: Preset): Record<string, number> {
 /* ---- sub-builds per class line (e.g. Sniper: ADL / Falcon / Trap) ----
  * Each variant tweaks the stat order AND boosts skills whose name matches
  * skillBoost keywords (Thai + English, best-effort). Editable. */
-type Variant = { name: string; statOrder: string[]; targets?: Record<string, number>; skillBoost: string[] };
+type Variant = {
+  name: string; statOrder: string[]; targets?: Record<string, number>; skillBoost: string[];
+  // per-build guidance (shown instead of the role-level preset when a สาย is picked)
+  skills?: string[]; gear?: string[]; cards?: string[];
+};
 const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
   {
     // Archer / Hunter / Sniper / Ranger line
     match: ["archer", "อาเชอร์", "hunter", "ฮันเตอร์", "sniper", "สไนเปอร์", "ranger", "เรนเจอร์"],
     variants: [
       { name: "ADL (ออโต้)", statOrder: ["AGI", "DEX", "LUK", "VIT", "INT"], targets: { AGI: 120, DEX: 110, LUK: 60 },
-        skillBoost: ["strafe", "double", "arrow", "true sight", "concentration", "owl", "vulture", "sharp", "สเตรฟ", "ลูกศร", "แม่นยำ"] },
+        skillBoost: ["strafe", "double", "arrow", "true sight", "concentration", "owl", "vulture", "sharp", "สเตรฟ", "ลูกศร", "แม่นยำ"],
+        skills: ["แม็กซ์ Double Strafe + ยิงรัว", "True Sight / Owl's Eye / Vulture Eye เพิ่มแม่น+ATK", "ที่เหลือลง ASPD / หลบ"],
+        gear: ["ธนู ATK ระยะไกลสูง", "เพิ่ม AGI/ASPD + DEX", "ลูกศรธาตุครบมือ"],
+        cards: ["การ์ดเพิ่มดาเมจระยะไกล", "การ์ด AGI/ATK", "การ์ดดาเมจต่อเผ่า/ขนาด"] },
       { name: "สายนก (Falcon)", statOrder: ["DEX", "LUK", "AGI", "INT", "VIT"], targets: { DEX: 110, LUK: 120, AGI: 80, INT: 60 },
-        skillBoost: ["falcon", "blitz", "เหยี่ยว", "นก", "beat", "assault", "crow", "steel crow"] },
+        skillBoost: ["falcon", "blitz", "เหยี่ยว", "นก", "beat", "assault", "crow", "steel crow"],
+        skills: ["แม็กซ์ Blitz Beat + Falcon Mastery", "Steel Crow เพิ่มดาเมจเหยี่ยว", "Owl's Eye/Vulture Eye เสริม DEX"],
+        gear: ["เพิ่ม DEX/LUK/INT (ดาเมจเหยี่ยว)", "ของเสริมดาเมจสัตว์/อสูร", "ASPD"],
+        cards: ["การ์ด DEX/LUK", "ดาเมจต่อเผ่า", "เพิ่มดาเมจ Blitz/สัตว์"] },
       { name: "สายกับดัก (Trap)", statOrder: ["DEX", "INT", "VIT", "AGI", "LUK"], targets: { DEX: 110, INT: 90, VIT: 80 },
-        skillBoost: ["trap", "กับดัก", "claymore", "blast", "land mine", "sandman", "ankle", "freezing", "flasher", "ทราป"] },
+        skillBoost: ["trap", "กับดัก", "claymore", "blast", "land mine", "sandman", "ankle", "freezing", "flasher", "ทราป"],
+        skills: ["แม็กซ์ Claymore Trap / Blast Mine", "Ankle Snare / Sandman คุมศัตรู", "Spring Trap / Remove Trap เสริม"],
+        gear: ["เพิ่ม INT/DEX (ดาเมจกับดัก)", "ลดเวลาวางกับดัก", "VIT กันตาย"],
+        cards: ["การ์ด INT/DEX", "ดาเมจกับดัก/ตามธาตุ", "VIT/ต้านสถานะ"] },
     ],
   },
   {
@@ -365,13 +378,22 @@ const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
     match: ["knight", "ไนท์", "rune", "รูน", "lord knight", "ลอร์ด"],
     variants: [
       { name: "สายหอก (Pierce/Spiral)", statOrder: ["STR", "DEX", "VIT", "AGI"], targets: { STR: 120, DEX: 90, VIT: 90 },
-        skillBoost: ["spear", "pierce", "spiral", "หอก", "แทง", "brandish"] },
+        skillBoost: ["spear", "pierce", "spiral", "หอก", "แทง", "brandish"],
+        skills: ["แม็กซ์ Pierce / Spiral Pierce", "ความชำนาญ Spear + ขี่ม้า (Cavalier)", "Provoke / Charge Attack เสริม"],
+        gear: ["หอก ATK สูง / เจาะ DEF", "เพิ่ม STR/DEX", "ดาเมจต่อขนาดใหญ่ (หอกแรงกับ Large)"],
+        cards: ["การ์ด STR/ATK", "ดาเมจต่อขนาดใหญ่", "เจาะ DEF"] },
       { name: "สายดาบ 2 มือ", statOrder: ["STR", "AGI", "LUK", "VIT"], targets: { STR: 120, AGI: 90, LUK: 60 },
-        skillBoost: ["bowling", "bash", "two-hand", "sword", "ดาบ", "ฟัน", "magnum"] },
+        skillBoost: ["bowling", "bash", "two-hand", "sword", "ดาบ", "ฟัน", "magnum"],
+        skills: ["แม็กซ์ Bowling Bash", "ความชำนาญดาบ + เพิ่มความเร็วโจมตีดาบ", "Bash/Magnum + Auto Counter (คริ)"],
+        gear: ["ดาบ 2 มือ ATK สูง", "เพิ่ม STR/AGI + คริ", "ASPD"],
+        cards: ["การ์ด STR/ATK", "คริ/ASPD", "ดาเมจต่อเผ่า"] },
       // ไนท์เผา = Rune Knight Dragon Breath: ดาเมจสเกลตาม HP+SP → ไต้หวันดัน VIT+INT
       // แม็กซ์คู่กัน, DEX ดัน命中 (รวม >520), STR เก็บตกจากแต้มที่เหลือ
       { name: "ไนท์เผา (Dragon Breath)", statOrder: ["VIT", "INT", "DEX", "STR"], targets: { VIT: 120, INT: 120, DEX: 60 },
-        skillBoost: ["dragon breath", "breath", "dragon", "draconic", "มังกร", "ลมหายใจ", "เผา", "fire", "ไฟ"] },
+        skillBoost: ["dragon breath", "breath", "dragon", "draconic", "มังกร", "ลมหายใจ", "เผา", "fire", "ไฟ"],
+        skills: ["แม็กซ์ Dragon Breath (ไฟ/น้ำ)", "ขี่มังกร (Dragon Training) + เพิ่ม HP/SP", "สกิลลดดาเมจ/เอาตัวรอด"],
+        gear: ["เพิ่ม Max HP + Max SP (สเกลดาเมจ)", "ดาเมจระยะไกล/ธาตุไฟ", "VIT/INT"],
+        cards: ["การ์ด HP%/SP%", "ดาเมจธาตุไฟ/ระยะไกล", "VIT/INT + ลดดาเมจ"] },
     ],
   },
   {
@@ -379,9 +401,15 @@ const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
     match: ["crusader", "ครูเสด", "paladin", "พาลาดิน", "royal", "รอยัล"],
     variants: [
       { name: "แทงค์ (Shield)", statOrder: ["VIT", "STR", "DEX", "INT"], targets: { VIT: 120, STR: 90, DEX: 60 },
-        skillBoost: ["shield", "defending", "provoke", "guard", "โล่", "ป้องกัน", "shield chain", "overbrand"] },
+        skillBoost: ["shield", "defending", "provoke", "guard", "โล่", "ป้องกัน", "shield chain", "overbrand"],
+        skills: ["แม็กซ์ Shield Chain / Shield Boomerang", "Defending Aura + Auto Guard / Reflect", "Provoke / Devotion เสริม"],
+        gear: ["โล่ดี + เพิ่ม VIT/Max HP", "ลดดาเมจรับ (% reduction)", "เกราะธาตุ/ต้านสถานะ"],
+        cards: ["การ์ด HP%/VIT", "ลดดาเมจจากเผ่า/ขนาด", "ต้านสถานะ (สตัน/แช่แข็ง)"] },
       { name: "Grand Cross", statOrder: ["VIT", "INT", "STR", "DEX"], targets: { VIT: 110, INT: 90, STR: 80, DEX: 50 },
-        skillBoost: ["grand cross", "holy", "cross", "กางเขน", "ศักดิ์สิทธิ์"] },
+        skillBoost: ["grand cross", "holy", "cross", "กางเขน", "ศักดิ์สิทธิ์"],
+        skills: ["แม็กซ์ Grand Cross", "Holy Cross / Heal เสริม", "Defending / Auto Guard กันตาย"],
+        gear: ["เพิ่ม INT/VIT + ดาเมจธาตุ Holy", "ของธาตุศักดิ์สิทธิ์", "Max HP/SP"],
+        cards: ["การ์ด INT/VIT", "ดาเมจธาตุ Holy", "ลดดาเมจ/ต้านสถานะ"] },
     ],
   },
   {
@@ -389,11 +417,20 @@ const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
     match: ["mage", "เมจ", "wizard", "วิซ", "warlock", "วอร์ล็อก"],
     variants: [
       { name: "สายไฟ/หิน (Meteor)", statOrder: ["INT", "DEX", "VIT", "LUK"], targets: { INT: 120, DEX: 90, VIT: 50 },
-        skillBoost: ["meteor", "fire", "earth", "heaven", "ไฟ", "อุกกาบาต"] },
+        skillBoost: ["meteor", "fire", "earth", "heaven", "ไฟ", "อุกกาบาต"],
+        skills: ["แม็กซ์ Meteor Storm + Fire Bolt/Wall", "Heaven's Drive สาย Earth", "ลดเวลาร่าย + ฟื้น SP"],
+        gear: ["MATK/INT + ดาเมจธาตุไฟ-ดิน", "ลดเวลาร่าย (VCT)", "เพิ่ม SP"],
+        cards: ["การ์ด MATK/INT", "ดาเมจธาตุไฟ/ดิน", "ลดเวลาร่าย/SP"] },
       { name: "สายน้ำแข็ง/สายฟ้า", statOrder: ["INT", "DEX", "VIT", "LUK"], targets: { INT: 120, DEX: 99, VIT: 50 },
-        skillBoost: ["storm", "jupitel", "frost", "cold", "lightning", "vermilion", "สายฟ้า", "น้ำแข็ง"] },
+        skillBoost: ["storm", "jupitel", "frost", "cold", "lightning", "vermilion", "สายฟ้า", "น้ำแข็ง"],
+        skills: ["แม็กซ์ Storm Gust / Lord of Vermilion", "Frost Diver / Jupitel Thunder", "ลดเวลาร่าย + ฟื้น SP"],
+        gear: ["MATK/INT + ดาเมจธาตุน้ำ-ลม", "ลดเวลาร่าย (VCT)", "เพิ่ม SP"],
+        cards: ["การ์ด MATK/INT", "ดาเมจธาตุน้ำ/ลม", "ลดเวลาร่าย/SP"] },
       { name: "สายบอลต์ (Bolt)", statOrder: ["INT", "DEX", "VIT", "LUK"], targets: { INT: 120, DEX: 80, VIT: 50 },
-        skillBoost: ["bolt", "soul", "napalm", "โบลต์"] },
+        skillBoost: ["bolt", "soul", "napalm", "โบลต์"],
+        skills: ["แม็กซ์ Bolt ธาตุที่ใช้ (ไฟ/น้ำ/ฟ้า)", "Soul Strike / Napalm Beat สาย Ghost", "Amplify / ลดเวลาร่าย"],
+        gear: ["MATK/INT สูง", "ลดเวลาร่าย", "เพิ่ม SP"],
+        cards: ["การ์ด MATK/INT", "ดาเมจตามธาตุ", "ลดเวลาร่าย/SP"] },
     ],
   },
   {
@@ -401,18 +438,30 @@ const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
     match: ["priest", "พรีสต์", "bishop", "บิชอป", "acolyte", "อโคไลท์"],
     variants: [
       { name: "ซัพพอร์ต (Full Support)", statOrder: ["INT", "DEX", "VIT", "LUK"], targets: { INT: 120, DEX: 90, VIT: 80 },
-        skillBoost: ["heal", "bless", "agi", "sanctuary", "kyrie", "ฮีล", "พร", "อวยพร"] },
+        skillBoost: ["heal", "bless", "agi", "sanctuary", "kyrie", "ฮีล", "พร", "อวยพร"],
+        skills: ["แม็กซ์ Heal + Blessing / Increase AGI", "Sanctuary / Kyrie Eleison", "Resurrection / Safety Wall"],
+        gear: ["เพิ่ม INT + พลังฮีล", "ลดเวลาร่าย / เพิ่ม SP", "VIT/Max HP กันตาย"],
+        cards: ["การ์ด INT/SP", "ลดเวลาร่าย", "VIT/ต้านสถานะ"] },
       { name: "สายตีอนเดด (Turn Undead)", statOrder: ["INT", "DEX", "VIT", "LUK"], targets: { INT: 120, DEX: 99, VIT: 60 },
-        skillBoost: ["undead", "magnus", "holy light", "judex", "อนเดด", "ศักดิ์สิทธิ์"] },
+        skillBoost: ["undead", "magnus", "holy light", "judex", "อนเดด", "ศักดิ์สิทธิ์"],
+        skills: ["แม็กซ์ Turn Undead + Magnus Exorcismus", "Holy Light / Judex", "Blessing / Sanctuary เสริม"],
+        gear: ["MATK/INT + ดาเมจธาตุ Holy", "ลดเวลาร่าย", "เพิ่ม SP"],
+        cards: ["การ์ด INT/MATK", "ดาเมจ Holy / ต่อ Undead", "ลดเวลาร่าย/SP"] },
     ],
   },
   {
     match: ["monk", "มังค์", "sura", "ซูระ", "champion"],
     variants: [
       { name: "อสุระ (Asura)", statOrder: ["STR", "INT", "DEX", "VIT"], targets: { STR: 110, INT: 90, DEX: 80 },
-        skillBoost: ["asura", "spirit", "fury", "อสุระ", "ตะวัน"] },
+        skillBoost: ["asura", "spirit", "fury", "อสุระ", "ตะวัน"],
+        skills: ["แม็กซ์ Asura Strike (Guillotine Fist)", "Spirit Spheres + Fury / Critical Explosion", "Blade Stop / Snap เข้าหา"],
+        gear: ["เพิ่ม STR/INT + Max SP (สเกล Asura)", "ดาเมจ/เจาะ DEF", "ลดคูลดาวน์"],
+        cards: ["การ์ด STR/INT", "ดาเมจต่อเผ่า/บอส", "SP / ลดดาเมจ"] },
       { name: "คอมโบ (Combo)", statOrder: ["STR", "AGI", "DEX", "VIT"], targets: { STR: 110, AGI: 90, DEX: 80 },
-        skillBoost: ["combo", "fist", "investigate", "chain", "หมัด", "คอมโบ"] },
+        skillBoost: ["combo", "fist", "investigate", "chain", "หมัด", "คอมโบ"],
+        skills: ["Triple Attack → Chain Combo → Combo Finish", "Investigate / Occult เจาะ DEF", "Spirit Spheres + Fury"],
+        gear: ["เพิ่ม STR/AGI + ASPD", "เจาะ DEF", "ดาเมจหมัด/ต่อเผ่า"],
+        cards: ["การ์ด STR/AGI", "ASPD / เจาะ DEF", "ดาเมจต่อเผ่า"] },
     ],
   },
   {
@@ -420,22 +469,37 @@ const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
     variants: [
       // เมตาไต้หวัน (十字刺客): กาต้าร์ดับเบิลคริ — 暴擊型 STR/AGI/LUK
       { name: "กาต้าร์ คริ (暴擊)", statOrder: ["AGI", "STR", "LUK", "DEX"], targets: { AGI: 110, STR: 110, LUK: 90 },
-        skillBoost: ["katar", "grimtooth", "cloak", "crit", "กะตาร์", "คริ", "拳刃"] },
+        skillBoost: ["katar", "grimtooth", "cloak", "crit", "กะตาร์", "คริ", "拳刃"],
+        skills: ["แม็กซ์ Sonic Blow + ความชำนาญกาต้าร์", "Enchant Poison / Grimtooth", "Cloaking / Improve Dodge"],
+        gear: ["กาต้าร์ ATK/คริสูง", "เพิ่ม AGI/STR/LUK + คริ", "ASPD"],
+        cards: ["การ์ดคริ/ATK", "ดาเมจต่อเผ่า/ขนาด", "ASPD"] },
       // 音投型 (Sonic Throw) — ไต้หวันใช้ STR/VIT/LUK (อึดกว่า, ใช้ซอนิคโยน)
       { name: "กาต้าร์ ซอนิค (音投)", statOrder: ["STR", "VIT", "LUK", "AGI"], targets: { STR: 110, VIT: 90, LUK: 90 },
-        skillBoost: ["sonic", "throw", "ซอนิค", "音投", "音速", "投擲"] },
+        skillBoost: ["sonic", "throw", "ซอนิค", "音投", "音速", "投擲"],
+        skills: ["แม็กซ์ Sonic Blow / ซอนิคโยน", "ความชำนาญกาต้าร์ + Enchant Poison", "Cloaking + สกิลเอาตัวรอด"],
+        gear: ["กาต้าร์ ATK สูง", "เพิ่ม STR/VIT/LUK", "Max HP"],
+        cards: ["การ์ด STR/HP%", "ดาเมจต่อเผ่า", "ต้านสถานะ"] },
       // ดาบคู่ = Double Attack เน้น ASPD สูงสุด + STR, DEX พอแม่น
       { name: "ดาบคู่ (Double Attack)", statOrder: ["AGI", "STR", "DEX", "LUK"], targets: { AGI: 120, STR: 110, DEX: 50 },
-        skillBoost: ["double", "red cut", "dual", "dagger", "ดาบคู่", "ดับเบิล", "กริช"] },
+        skillBoost: ["double", "red cut", "dual", "dagger", "ดาบคู่", "ดับเบิล", "กริช"],
+        skills: ["แม็กซ์ Double Attack + ความชำนาญดาบคู่", "Enchant Poison / Sonic Blow เสริม", "Improve Dodge / Cloaking"],
+        gear: ["กริช ATK/ASPD คู่", "เพิ่ม AGI/STR", "ดัน ASPD ให้ถึงเพดาน"],
+        cards: ["การ์ด AGI/ATK", "ASPD", "ดาเมจต่อเผ่า"] },
     ],
   },
   {
     match: ["gunslinger", "ปืน", "rebel", "rebellion", "night walker"],
     variants: [
       { name: "Rapid/Desperado", statOrder: ["DEX", "AGI", "LUK", "VIT"], targets: { DEX: 120, AGI: 100 },
-        skillBoost: ["rapid", "desperado", "bullet", "gatling", "rain", "กระสุน"] },
+        skillBoost: ["rapid", "desperado", "bullet", "gatling", "rain", "กระสุน"],
+        skills: ["แม็กซ์ Rapid Shower / Desperado", "Gatling Fever + Increase Accuracy", "Madness Canceller"],
+        gear: ["ปืน ATK ระยะไกลสูง", "เพิ่ม DEX/AGI + ASPD", "กระสุนธาตุ"],
+        cards: ["การ์ด DEX/ATK", "ดาเมจระยะไกล", "ASPD"] },
       { name: "คริ/Single (Crit)", statOrder: ["DEX", "LUK", "AGI", "VIT"], targets: { DEX: 110, LUK: 110 },
-        skillBoost: ["single", "tracking", "crit", "snipe", "คริ"] },
+        skillBoost: ["single", "tracking", "crit", "snipe", "คริ"],
+        skills: ["แม็กซ์ Tracking / Single Action (คริ)", "Snake's Eye / Increase Accuracy", "Gunslinger Mastery"],
+        gear: ["ปืนคริสูง", "เพิ่ม DEX/LUK + คริ", "กระสุนธาตุ"],
+        cards: ["การ์ดคริ/DEX", "ดาเมจระยะไกล", "เจาะ DEF"] },
     ],
   },
 ];
@@ -1238,17 +1302,17 @@ export default function CharacterScreen() {
               <View style={styles.planDivider} />
             </>
           )}
-          <Text style={styles.planKey}>สกิล (แนวทาง)</Text>
-          {preset.skills.map((t, i) => <Text key={i} style={styles.planItem}>• {t}</Text>)}
+          <Text style={styles.planKey}>สกิล (แนวทาง){activeVariant ? " · " + activeVariant.name : ""}</Text>
+          {(activeVariant?.skills ?? preset.skills).map((t, i) => <Text key={i} style={styles.planItem}>• {t}</Text>)}
           <TouchableOpacity style={styles.skPlanOpen} onPress={() => setPicker({ kind: "skillplan" })}>
             <Text style={styles.skPlanOpenText}>เปิด Skill Planner (สกิลจริง) ▸</Text>
           </TouchableOpacity>
           <View style={styles.planDivider} />
           <Text style={styles.planKey}>ของที่ควรหา</Text>
-          {preset.gear.map((t, i) => <Text key={i} style={styles.planItem}>• {t}</Text>)}
+          {(activeVariant?.gear ?? preset.gear).map((t, i) => <Text key={i} style={styles.planItem}>• {t}</Text>)}
           <View style={styles.planDivider} />
           <Text style={styles.planKey}>การ์ด</Text>
-          {preset.cards.map((t, i) => <Text key={i} style={styles.planItem}>• {t}</Text>)}
+          {(activeVariant?.cards ?? preset.cards).map((t, i) => <Text key={i} style={styles.planItem}>• {t}</Text>)}
           {!build.job && <Text style={styles.planHint}>เลือกอาชีพด้านบนเพื่อดูแผนของสายนั้นโดยเฉพาะ</Text>}
         </View>
 
