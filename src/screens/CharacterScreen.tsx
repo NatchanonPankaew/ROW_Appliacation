@@ -11,8 +11,8 @@ import {
 } from "../api/roworlddb";
 
 const LOCALES = ["en-US", "th-TH", "zh-TW"];
-const MAX_LEVEL = 100;       // server cap ปัจจุบัน — ขยายภายหลังเมื่อเซิร์ฟปลดเลเวลเพิ่ม
-const STAT_CAP = 90;         // เพดานต่อ 1 สเตตัส (มาตรฐานสาย Origin/World)
+const MAX_LEVEL = 120;       // server cap ปัจจุบัน — ขยายภายหลังเมื่อเซิร์ฟปลดเลเวลเพิ่ม
+const STAT_CAP = 120;         // เพดานต่อ 1 สเตตัส (มาตรฐานสาย Origin/World)
 const MAX_REFINE = 20;
 const MAX_CARDS = 2;          // each equipment slot holds at most 2 cards
 const BASE_STATS = ["STR", "AGI", "VIT", "INT", "DEX", "LUK"];
@@ -156,6 +156,7 @@ function flatCombatFromGear(totals: Record<string, number>): Partial<Combat> {
   const out: Partial<Combat> = {};
   for (const k of Object.keys(totals)) {
     if (BASE_STATS.includes(k.toUpperCase())) continue; // never treat base stats as combat
+    if (k.includes("%")) continue;                      // percents handled separately in computeCombat
     const n = k.toLowerCase();
     for (const a of COMBAT_ALIASES) {
       if (a.kw.some((w) => n.includes(w))) { out[a.key] = (out[a.key] || 0) + totals[k]; break; }
@@ -172,15 +173,20 @@ function computeCombat(b: Build, totals: Record<string, number>): Combat {
   const g = flatCombatFromGear(totals);
   const r1 = (x: number) => Math.round(x * 10) / 10;
 
+  // percentage bonuses from gear/cards (e.g. "HP สูงสุด% +4%", "ATK% +8%")
+  const pct = (k: string) => totals[k] || 0;
+
   const hpFlat = c.hpBase + c.hpPerLevel * (lvl - 1) + str * COEF.strHp + vit * COEF.vitHp + (g.maxHP || 0);
-  const maxHP = Math.floor(hpFlat * (1 + (vit * COEF.vitHpPct) / 100));
+  const maxHP = Math.floor(hpFlat * (1 + (vit * COEF.vitHpPct + pct("HP%")) / 100));
   const spFlat = c.spBase + c.spPerLevel * (lvl - 1) + intl * COEF.intSp + (g.maxSP || 0);
-  const maxSP = Math.floor(spFlat * (1 + (intl * COEF.intSpPct) / 100));
+  const maxSP = Math.floor(spFlat * (1 + (intl * COEF.intSpPct + pct("SP%")) / 100));
 
   const lukAtk = luk * COEF.lukAtk;
-  const patkM = Math.round(str * COEF.strAtk + lukAtk + (g.patkM || 0));        // melee
-  const patkR = Math.round(dex * COEF.dexAtkRanged + lukAtk + (g.patkM || 0));  // ranged
-  const matk = Math.round(intl * COEF.intMatk + (g.matk || 0));
+  const atkMul = 1 + pct("ATK%") / 100;
+  const matkMul = 1 + pct("MATK%") / 100;
+  const patkM = Math.round((str * COEF.strAtk + lukAtk + (g.patkM || 0)) * atkMul);        // melee
+  const patkR = Math.round((dex * COEF.dexAtkRanged + lukAtk + (g.patkM || 0)) * atkMul);  // ranged
+  const matk = Math.round((intl * COEF.intMatk + (g.matk || 0)) * matkMul);
   const pdef = r1(vit * COEF.vitPdef + agi * COEF.agiPdef + (g.pdef || 0));
   const mdef = r1(vit * COEF.vitMdef + intl * COEF.intMdef + (g.mdef || 0));
   const hit = Math.round(lvl + dex * COEF.dexHit + (g.hit || 0));

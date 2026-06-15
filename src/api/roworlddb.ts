@@ -183,26 +183,37 @@ function numStats(stats: any): Record<string, number> {
 // Cards store their bonuses as TEXT (e.g. "LUK +4~7", "Atk +9~15"), not numbers.
 // Pull the flat stat bonuses out so the build calculator can sum them. Ranges
 // (a~b) use the upper bound; percentage bonuses (reductions etc.) are skipped.
-const CARD_STAT_KW: [RegExp, string][] = [
-  [/\bstr\b|พละกำลัง|พลังกาย/i, "STR"],
-  [/\bagi\b|ความว่องไว/i, "AGI"],
-  [/\bvit\b|พลังชีวิต/i, "VIT"],
-  [/\bint\b|สติปัญญา/i, "INT"],
-  [/\bdex\b|ความแม่นยำ/i, "DEX"],
-  [/\bluk\b|โชค/i, "LUK"],
-  [/\bm\.?atk\b|พลังเวท/i, "MATK"],
-  [/\bp\.?atk\b|\batk\b|พลังโจมตี/i, "ATK"],
+// name -> [flatKey, percentKey]. percentKey null = no percent form for this stat.
+// keys are chosen so the builder's combat-alias matcher picks the flat ones up,
+// while percent keys (suffixed "%") are read directly by computeCombat.
+const CARD_STAT_KW: [RegExp, string, string | null][] = [
+  [/\bstr\b|พละกำลัง|พลังกาย/i, "STR", null],
+  [/\bagi\b|ความว่องไว/i, "AGI", null],
+  [/\bvit\b|พลังชีวิต(?!สูงสุด)/i, "VIT", null],
+  [/\bint\b|สติปัญญา/i, "INT", null],
+  [/\bdex\b|ความแม่นยำ/i, "DEX", null],
+  [/\bluk\b|โชค/i, "LUK", null],
+  [/\bm\.?atk\b|พลังเวท/i, "MATK", "MATK%"],
+  [/\bp\.?atk\b|\batk\b|พลังโจมตี/i, "ATK", "ATK%"],
+  [/max\s*hp|hp\s*สูงสุด|\bhp\b|พลังชีวิตสูงสุด|เลือด/i, "Max HP", "HP%"],
+  [/max\s*sp|sp\s*สูงสุด|\bsp\b|พลังเวทสูงสุด/i, "Max SP", "SP%"],
+  [/p\.?def|ป้องกันกาย/i, "P.DEF", null],
+  [/m\.?def|ป้องกันเวท/i, "M.DEF", null],
 ];
 function parseCardStats(effects: string[]): Record<string, number> {
   const out: Record<string, number> = {};
   for (const line of effects || []) {
-    const m = String(line).match(/([^+]*?)\+\s*(\d+)(?:\s*~\s*(\d+))?\s*(%?)/);
-    if (!m || m[4] === "%") continue;          // skip % bonuses (resist/reduction)
+    const m = String(line).match(/([^+]*?)\+\s*(\d+(?:\.\d+)?)\s*(%?)(?:\s*~\s*(\d+(?:\.\d+)?))?\s*(%?)/);
+    if (!m) continue;
     const name = m[1];
-    const val = Number(m[3] || m[2]);          // upper bound of a range
+    const pct = m[3] === "%" || m[5] === "%";
+    const val = Number(m[4] || m[2]);          // upper bound of a range
     if (!val) continue;
-    for (const [re, key] of CARD_STAT_KW) {
-      if (re.test(name)) { out[key] = (out[key] || 0) + val; break; }
+    for (const [re, flatKey, pctKey] of CARD_STAT_KW) {
+      if (!re.test(name)) continue;
+      const key = pct ? pctKey : flatKey;
+      if (key) out[key] = Math.round(((out[key] || 0) + val) * 100) / 100;
+      break;
     }
   }
   return out;
