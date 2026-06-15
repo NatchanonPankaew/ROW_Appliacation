@@ -11,7 +11,8 @@ import {
 } from "../api/roworlddb";
 
 const LOCALES = ["en-US", "th-TH", "zh-TW"];
-const MAX_LEVEL = 120;
+const MAX_LEVEL = 200;        // server cap ยังทยอยปลด — ตั้งเผื่ออนาคต (4th job era)
+const STAT_CAP = 159;         // เพดานต่อ 1 สเตตัส (มาตรฐานสาย Origin/World)
 const MAX_REFINE = 20;
 const MAX_CARDS = 2;          // each equipment slot holds at most 2 cards
 const BASE_STATS = ["STR", "AGI", "VIT", "INT", "DEX", "LUK"];
@@ -245,8 +246,8 @@ const PRESETS: Preset[] = [
   {
     role: "ระยะไกล / Ranged",
     match: ["hunter", "ฮันเตอร์", "sniper", "สไนเปอร์", "ranger", "เรนเจอร์", "archer", "อาเชอร์", "minstrel", "wanderer", "gunslinger", "ปืน", "rebellion"],
-    statOrder: ["DEX", "AGI", "LUK", "INT", "VIT"],
-    targets: { DEX: 120, AGI: 90, LUK: 60 },
+    statOrder: ["AGI", "DEX", "LUK", "INT", "VIT"],
+    targets: { AGI: 120, DEX: 110, LUK: 60 },
     skills: [
       "Job 1: แม็กซ์เพิ่มแม่นยำ + ATK ของธนู/ปืน",
       "Job 2: แม็กซ์สกิลยิงหลัก + กับดัก/ลูกธนูธาตุ",
@@ -300,32 +301,40 @@ function pickPreset(jobName: string): Preset {
 }
 
 // Spend points focused on the build's CORE stats (the ones with explicit
-// targets, e.g. DEX/AGI/LUK for ADL). Round-robin among those for max DPS, and
-// do NOT leak points into stats the build doesn't want (VIT/INT for ADL).
+// targets, e.g. AGI/DEX/LUK for ADL), and do NOT leak points into stats the
+// build doesn't want (VIT/INT for ADL).
 function planAllocate(level: number, preset: Preset): Record<string, number> {
   const stats = freshStats();
   let pts = pointsForLevel(level);
   const targeted = Object.keys(preset.targets || {});
   const core = targeted.length ? targeted : preset.statOrder.slice(0, 3);
-  const order = preset.statOrder.filter((k) => core.includes(k)); // keep priority order
+  const order = preset.statOrder.filter((k) => core.includes(k)); // priority order
   const target = (k: string) => preset.targets?.[k] ?? 120;
-  // round-robin among core stats up to their targets
+  // PROPORTIONAL fill: each point goes to the core stat that is, relative to its
+  // target, the most behind. This keeps the spread proportional to the targets
+  // at EVERY level — at low level you get the same ratios, just smaller numbers
+  // (e.g. AGI:DEX:LUK 120:110:60 stays ~120:110:60 at Lv60). Ties break by the
+  // priority order, so the higher-priority stat edges ahead.
+  let guard = 0;
+  while (pts > 0 && guard++ < 100000) {
+    let best: string | null = null, bestDeficit = -1;
+    for (const k of order) {
+      if (stats[k] >= target(k)) continue;
+      if (pts < costToRaise(stats[k])) continue;
+      const deficit = (target(k) - stats[k]) / target(k);
+      if (deficit > bestDeficit) { bestDeficit = deficit; best = k; }
+    }
+    if (!best) break;
+    pts -= costToRaise(stats[best]);
+    stats[best] += 1;
+  }
+  // leftover (high level / low caps): top up in priority order up to the stat
+  // cap, still without leaking into off-build stats.
   let advanced = true;
   while (advanced && pts > 0) {
     advanced = false;
     for (const k of order) {
-      if (stats[k] >= target(k)) continue;
-      const c = costToRaise(stats[k]);
-      if (pts < c) continue;
-      stats[k] += 1; pts -= c; advanced = true;
-    }
-  }
-  // leftover: top up the same core stats up to 120 (still no VIT/INT leak)
-  advanced = true;
-  while (advanced && pts > 0) {
-    advanced = false;
-    for (const k of order) {
-      if (stats[k] >= 120) continue;
+      if (stats[k] >= STAT_CAP) continue;
       const c = costToRaise(stats[k]);
       if (pts < c) continue;
       stats[k] += 1; pts -= c; advanced = true;
@@ -343,7 +352,7 @@ const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
     // Archer / Hunter / Sniper / Ranger line
     match: ["archer", "อาเชอร์", "hunter", "ฮันเตอร์", "sniper", "สไนเปอร์", "ranger", "เรนเจอร์"],
     variants: [
-      { name: "ADL (ออโต้)", statOrder: ["DEX", "AGI", "LUK", "VIT", "INT"], targets: { DEX: 110, AGI: 120, LUK: 110 },
+      { name: "ADL (ออโต้)", statOrder: ["AGI", "DEX", "LUK", "VIT", "INT"], targets: { AGI: 120, DEX: 110, LUK: 60 },
         skillBoost: ["strafe", "double", "arrow", "true sight", "concentration", "owl", "vulture", "sharp", "สเตรฟ", "ลูกศร", "แม่นยำ"] },
       { name: "สายนก (Falcon)", statOrder: ["DEX", "LUK", "AGI", "INT", "VIT"], targets: { DEX: 110, LUK: 120, AGI: 80 },
         skillBoost: ["falcon", "blitz", "เหยี่ยว", "นก", "beat", "assault", "crow", "steel crow"] },
@@ -359,6 +368,10 @@ const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
         skillBoost: ["spear", "pierce", "spiral", "หอก", "แทง", "brandish"] },
       { name: "สายดาบ 2 มือ", statOrder: ["STR", "DEX", "AGI", "VIT"], targets: { STR: 120, AGI: 90, DEX: 80 },
         skillBoost: ["bowling", "bash", "two-hand", "sword", "ดาบ", "ฟัน", "magnum"] },
+      // ไนท์เผา = Rune Knight Dragon Breath: ดาเมจสเกลตาม HP+SP → ไต้หวันดัน VIT+INT
+      // แม็กซ์คู่กัน, DEX ดัน命中 (รวม >520), STR เก็บตกจากแต้มที่เหลือ
+      { name: "ไนท์เผา (Dragon Breath)", statOrder: ["VIT", "INT", "DEX", "STR"], targets: { VIT: 120, INT: 120, DEX: 60 },
+        skillBoost: ["dragon breath", "breath", "dragon", "draconic", "มังกร", "ลมหายใจ", "เผา", "fire", "ไฟ"] },
     ],
   },
   {
@@ -405,10 +418,15 @@ const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
   {
     match: ["assassin", "แอสซาซิน", "cross", "guillotine", "กิโยติน"],
     variants: [
-      { name: "Sonic Blow (กะตาร์)", statOrder: ["STR", "AGI", "DEX", "LUK"], targets: { STR: 110, AGI: 110, DEX: 80 },
-        skillBoost: ["sonic", "katar", "cloak", "grimtooth", "ซอนิค", "กะตาร์"] },
-      { name: "สายพิษ/คริ (Crit)", statOrder: ["AGI", "LUK", "STR", "DEX"], targets: { AGI: 120, LUK: 100, STR: 80 },
-        skillBoost: ["venom", "poison", "crit", "พิษ", "คริ", "katar"] },
+      // เมตาไต้หวัน (十字刺客): กาต้าร์ดับเบิลคริ — 暴擊型 STR/AGI/LUK
+      { name: "กาต้าร์ คริ (暴擊)", statOrder: ["AGI", "STR", "LUK", "DEX"], targets: { AGI: 110, STR: 110, LUK: 90 },
+        skillBoost: ["katar", "grimtooth", "cloak", "crit", "กะตาร์", "คริ", "拳刃"] },
+      // 音投型 (Sonic Throw) — ไต้หวันใช้ STR/VIT/LUK (อึดกว่า, ใช้ซอนิคโยน)
+      { name: "กาต้าร์ ซอนิค (音投)", statOrder: ["STR", "VIT", "LUK", "AGI"], targets: { STR: 110, VIT: 90, LUK: 90 },
+        skillBoost: ["sonic", "throw", "ซอนิค", "音投", "音速", "投擲"] },
+      // ดาบคู่ = Double Attack เน้น ASPD สูงสุด + STR, DEX พอแม่น
+      { name: "ดาบคู่ (Double Attack)", statOrder: ["AGI", "STR", "DEX", "LUK"], targets: { AGI: 120, STR: 110, DEX: 50 },
+        skillBoost: ["double", "red cut", "dual", "dagger", "ดาบคู่", "ดับเบิล", "กริช"] },
     ],
   },
   {
@@ -559,10 +577,35 @@ function tierPool(idx: number): number {
   return 0;
 }
 
+/* ---- per-skill damage / DPS estimate ----------------------------------------
+ * Uses the game's own skill data: pve_percent (% of ATK/MATK) + pve_flat, and
+ * cooldown / gcd / cast (chant_fixed+chant_float) for the reuse cycle.
+ *   hit  = base * pve_percent/100 + pve_flat   (base = P.ATK or M.ATK)
+ *   DPS  = hit / cycleSeconds                  (cycle = max(cooldown, gcd+cast))
+ * Rough estimate — ignores resistances, combos, multi-hit counts, buffs. */
+type SkillDmg = { hit: number; dps: number; magic: boolean; cycle: number };
+function skillDamage(node: SkillNode, lvl: number, patk: number, matk: number): SkillDmg | null {
+  if (!node.levels) return null;
+  const use = lvl > 0 ? lvl : node.naturalMax || 1;
+  const L = node.levels[use] || node.levels[String(use)] || node.levels[node.naturalMax] ||
+    node.levels[1] || node.levels["1"];
+  if (!L) return null;
+  const pct = Number(L.pve_percent) || 0;
+  const flat = Number(L.pve_flat) || 0;
+  if (pct === 0 && flat === 0) return null;            // not a damage skill
+  const magic = /M\.DMG|M\.ATK|magic/i.test(String(L.des || ""));
+  const base = magic ? matk : patk;
+  const hit = base * (pct / 100) + flat;
+  const cast = (Number(L.chant_fixed) || 0) + (Number(L.chant_float) || 0);
+  const cycle = Math.max(Number(L.cooldown) || 0, (Number(L.gcd) || 0) + cast, 1000); // ms
+  return { hit: Math.round(hit), dps: Math.round(hit / (cycle / 1000)), magic, cycle };
+}
+
 /* ---- real skill planner (loads the live skill tree per job) ---- */
-function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, avoidKeywords, autoApply, onClose }: {
+function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, avoidKeywords, autoApply, patk, matk, onClose }: {
   locale: string; iconPaths: IconPaths | null; initialJobName?: string;
-  boostKeywords?: string[]; avoidKeywords?: string[]; autoApply?: boolean; onClose: () => void;
+  boostKeywords?: string[]; avoidKeywords?: string[]; autoApply?: boolean;
+  patk?: number; matk?: number; onClose: () => void;
 }) {
   const [index, setIndex] = useState<Record<number, JobNode> | null>(null);
   const [target, setTarget] = useState<number | null>(null);
@@ -864,6 +907,17 @@ function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, avoidK
               {!!selDes && (
                 <View style={styles.skDetail}>
                   <Text style={styles.skDetailName}>{selNode?.name}</Text>
+                  {(() => {
+                    if (!selNode) return null;
+                    const dmg = skillDamage(selNode, pts[selNode.kindId] || 0, patk || 0, matk || 0);
+                    if (!dmg) return null;
+                    return (
+                      <View style={styles.skDpsRow}>
+                        <Text style={styles.skDpsMain}>≈ {dmg.hit.toLocaleString()} /ครั้ง</Text>
+                        <Text style={styles.skDpsSub}>DPS ≈ {dmg.dps.toLocaleString()} · {dmg.magic ? "เวท (MATK)" : "กาย (P.ATK)"} · รอบ {(dmg.cycle / 1000).toFixed(1)}s</Text>
+                      </View>
+                    );
+                  })()}
                   <Text style={styles.skDetailDes}>{selDes}</Text>
                 </View>
               )}
@@ -983,13 +1037,13 @@ export default function CharacterScreen() {
   // stats you should be raising right now (updates as the level changes).
   const recStats = useMemo(() => {
     const p = activeVariant
-      ? { ...preset, statOrder: activeVariant.statOrder, targets: { ...preset.targets, ...activeVariant.targets } }
+      ? { ...preset, statOrder: activeVariant.statOrder, targets: activeVariant.targets }
       : preset;
     return planAllocate(build.level, p);
   }, [build.level, preset, activeVariant]);
   const applyPlan = () => {
     const p = activeVariant
-      ? { ...preset, statOrder: activeVariant.statOrder, targets: { ...preset.targets, ...activeVariant.targets } }
+      ? { ...preset, statOrder: activeVariant.statOrder, targets: activeVariant.targets }
       : preset;
     setBuild((b) => ({ ...b, stats: planAllocate(b.level, p) }));
   };
@@ -1027,6 +1081,16 @@ export default function CharacterScreen() {
       const v = b.stats[k];
       if (dir > 0) { if (pointsForLevel(b.level) - spentPoints(b.stats) < costToRaise(v)) return b; return { ...b, stats: { ...b.stats, [k]: v + 1 } }; }
       if (v <= 1) return b; return { ...b, stats: { ...b.stats, [k]: v - 1 } };
+    });
+  // typed-in stat value: raise stat k toward the requested number, but never
+  // beyond what the remaining points allow (so the build stays legal).
+  const setStatValue = (k: string, raw: number) =>
+    setBuild((b) => {
+      const want = Math.max(1, Math.min(STAT_CAP, Math.floor(raw) || 1));
+      const avail = pointsForLevel(b.level) - spentPoints({ ...b.stats, [k]: 1 });
+      let v = 1, used = 0;
+      while (v < want) { const c = costToRaise(v); if (used + c > avail) break; used += c; v++; }
+      return { ...b, stats: { ...b.stats, [k]: v } };
     });
 
   // items to show in the slot picker: matching slot, filtered by the selected
@@ -1211,12 +1275,25 @@ export default function CharacterScreen() {
         <View style={styles.statBox}>
           {totalKeys.length === 0 ? (
             <Text style={[styles.empty, { padding: 14 }]}>ใส่ของ/การ์ด หรือลงสเตตัสเพื่อดูค่ารวม</Text>
-          ) : totalKeys.map((k, i) => (
-            <View key={k} style={[styles.statRow, i % 2 === 1 && styles.statRowAlt]}>
-              <Text style={styles.statLabel}>{k.toUpperCase()}</Text>
-              <Text style={styles.statValue}>{totals[k]}</Text>
-            </View>
-          ))}
+          ) : totalKeys.map((k, i) => {
+            // base stats show "หน้า + หลัง" = allocated base + bonus from gear/cards
+            const isBase = BASE_STATS.includes(k.toUpperCase());
+            const base = isBase ? (build.stats[k.toUpperCase()] || 0) : 0;
+            const bonus = isBase ? Math.round((totals[k] - base) * 100) / 100 : 0;
+            return (
+              <View key={k} style={[styles.statRow, i % 2 === 1 && styles.statRowAlt]}>
+                <Text style={styles.statLabel}>{k.toUpperCase()}</Text>
+                {isBase ? (
+                  <Text style={styles.statValue}>
+                    {base}
+                    {bonus > 0 && <Text style={styles.statBonus}> + {bonus}</Text>}
+                  </Text>
+                ) : (
+                  <Text style={styles.statValue}>{totals[k]}</Text>
+                )}
+              </View>
+            );
+          })}
         </View>
 
         {/* derived combat stats */}
@@ -1251,7 +1328,17 @@ export default function CharacterScreen() {
             return (
               <View key={k} style={[styles.allocRow, i % 2 === 1 && styles.statRowAlt]}>
                 <Text style={styles.allocLabel}>{k}</Text>
-                <Text style={[styles.allocValue, below && { color: "#E8B339" }]}>{v}</Text>
+                <TextInput
+                  key={k + "-" + v}
+                  defaultValue={String(v)}
+                  keyboardType="number-pad"
+                  selectTextOnFocus
+                  returnKeyType="done"
+                  maxLength={3}
+                  style={[styles.allocValue, styles.allocInput, below && { color: "#E8B339" }]}
+                  onEndEditing={(e) => setStatValue(k, Number(e.nativeEvent.text))}
+                  onSubmitEditing={(e) => setStatValue(k, Number(e.nativeEvent.text))}
+                />
                 <View style={{ flex: 1, marginLeft: 8 }}>
                   <Text style={styles.allocRec}>
                     แนะนำ <Text style={{ color: "#E8B339" }}>{rec}</Text>{below ? "  ▲ ควรอัพ" : v > rec ? "  เกิน" : "  ✓"}
@@ -1315,11 +1402,20 @@ export default function CharacterScreen() {
           onPick={(c) => { addCard(picker.slot!, c); setPicker(null); }} onClose={() => setPicker(null)} />
       )}
       {picker && picker.kind === "class" && (
-        <ClassModal jobs={jobs} iconPaths={iconPaths} onPick={(j) => { setBuild((b) => ({ ...b, job: j })); setPicker(null); }} onClose={() => setPicker(null)} />
+        <ClassModal jobs={jobs} iconPaths={iconPaths} onPick={(j) => {
+          // picking a class now auto-pours points into that class's recommended
+          // spread (uses the line's first sub-build, matching variantIdx=0).
+          const p = pickPreset(j.title || "");
+          const vs = pickVariants(j.title || "");
+          const plan = vs[0] ? { ...p, statOrder: vs[0].statOrder, targets: { ...p.targets, ...vs[0].targets } } : p;
+          setBuild((b) => ({ ...b, job: j, stats: planAllocate(b.level, plan) }));
+          setPicker(null);
+        }} onClose={() => setPicker(null)} />
       )}
       {picker && picker.kind === "skillplan" && (
         <SkillPlanner locale={locale} iconPaths={iconPaths} initialJobName={build.job?.title}
-          boostKeywords={activeVariant?.skillBoost} avoidKeywords={avoidKeywords} autoApply onClose={() => setPicker(null)} />
+          boostKeywords={activeVariant?.skillBoost} avoidKeywords={avoidKeywords} autoApply
+          patk={Math.max(combat.patkM, combat.patkR)} matk={combat.matk} onClose={() => setPicker(null)} />
       )}
     </View>
   );
@@ -1393,6 +1489,9 @@ const styles = StyleSheet.create({
   skBtnAdd: { backgroundColor: "#E8B339", borderColor: "#E8B339" },
   skBtnText: { color: "#C7CBD1", fontSize: 12, fontWeight: "bold", lineHeight: 14 },
   skDetail: { backgroundColor: "#0E0F12", borderRadius: 10, padding: 12, marginTop: 8 },
+  skDpsRow: { backgroundColor: "#16181D", borderRadius: 8, padding: 8, marginVertical: 6 },
+  skDpsMain: { color: "#E8B339", fontSize: 15, fontWeight: "800" },
+  skDpsSub: { color: "#8A8F99", fontSize: 11, fontWeight: "600", marginTop: 2 },
   skDetailName: { color: "#E8B339", fontSize: 13, fontWeight: "bold", marginBottom: 4 },
   skDetailDes: { color: "#C7CBD1", fontSize: 12, lineHeight: 18 },
 
@@ -1421,6 +1520,7 @@ const styles = StyleSheet.create({
   statRowAlt: { backgroundColor: "#121419" },
   statLabel: { color: "#8A8F99", fontSize: 14, fontWeight: "bold" },
   statValue: { color: "#F2F3F5", fontSize: 15, fontWeight: "bold" },
+  statBonus: { color: "#5DBB63", fontSize: 15, fontWeight: "bold" },
 
   allocRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 9 },
   allocRec: { color: "#8A8F99", fontSize: 11, fontWeight: "bold" },
@@ -1430,6 +1530,7 @@ const styles = StyleSheet.create({
   fillRecText: { color: "#E8B339", fontSize: 13, fontWeight: "bold" },
   allocLabel: { color: "#C7CBD1", fontSize: 14, fontWeight: "bold", width: 46 },
   allocValue: { color: "#F2F3F5", fontSize: 18, fontWeight: "bold", width: 44, textAlign: "center" },
+  allocInput: { backgroundColor: "#0E0F12", borderRadius: 8, borderWidth: 1, borderColor: "#23262D", paddingVertical: 4 },
   allocCost: { color: "#6B7079", fontSize: 11, fontWeight: "bold", flex: 1, marginLeft: 8 },
   stepBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: "#0E0F12", alignItems: "center", justifyContent: "center", marginLeft: 8 },
   stepAdd: { backgroundColor: "#E8B339" },
