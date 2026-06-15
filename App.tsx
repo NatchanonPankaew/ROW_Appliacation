@@ -1,5 +1,5 @@
 ﻿import React, { useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, useWindowDimensions } from "react-native";
 import {
   SafeAreaProvider, useSafeAreaInsets,
 } from "react-native-safe-area-context";
@@ -28,17 +28,20 @@ const TABS: { key: TabKey; label: string }[] = [
 
 function Main() {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isWide = width >= 640;                 // PC / tablet: center a phone-width column
   const [tab, setTab] = useState<TabKey>("cards");
   const [showSupport, setShowSupport] = useState(true); // greet with the Support popup
   const active = TABS.find((t) => t.key === tab)!;
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, isWide && styles.rootWide]}>
+      <View style={[styles.shell, isWide && styles.shellWide]}>
       {/* launch popup: follow YouTube + donate */}
       <Modal visible={showSupport} transparent animationType="fade"
         onRequestClose={() => setShowSupport(false)}>
         <View style={[styles.popupBg, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-          <View style={styles.popupCard}>
+          <View style={[styles.popupCard, isWide && { maxWidth: 520, alignSelf: "center", width: "100%" }]}>
             <View style={styles.popupHead}>
               <Text style={styles.popupTitle}>ยินดีต้อนรับ 🎉</Text>
               <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -82,6 +85,7 @@ function Main() {
           })}
         </ScrollView>
       </View>
+      </View>
     </View>
   );
 }
@@ -96,6 +100,9 @@ export default function App(): React.JSX.Element {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#0E0F12" },
+  rootWide: { backgroundColor: "#0A0B0E" },          // letterbox sides on PC
+  shell: { flex: 1, width: "100%" },
+  shellWide: { maxWidth: 520, alignSelf: "center" }, // phone-width column on PC
   header: { paddingHorizontal: 16, paddingBottom: 6, backgroundColor: "#0E0F12" },
   title: { color: "#F2F3F5", fontSize: 20, fontWeight: "800", letterSpacing: 0.3 },
   screen: { flex: 1 },

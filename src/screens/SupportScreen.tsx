@@ -10,6 +10,8 @@ const YT_HANDLE = "@NatyayCh";
 // Donate via PromptPay. The QR image is bundled so it works offline on every
 // platform; replace assets/donate-qr.png with your own QR to change the account.
 const DONATE_QR = require("../../assets/donate-qr.png");
+// YouTube channel cover — replace assets/yt-cover.png with the real banner image.
+const YT_COVER = require("../../assets/yt-cover.png");
 const DONATE_NAME = "นาย ณัฐชนนท์ ปานแก้ว";
 const DONATE_ACCOUNT = "xxx-x-x2284-x";
 
@@ -30,9 +32,10 @@ export default function SupportScreen() {
     >
       {/* ---- YouTube ---- */}
       <View style={styles.card}>
-        <View style={styles.iconBadgeYt}>
-          <Text style={styles.iconBadgeText}>▶</Text>
-        </View>
+        <TouchableOpacity activeOpacity={0.9} style={styles.coverWrap} onPress={() => openUrl(YT_CHANNEL_URL)}>
+          <Image source={YT_COVER} style={styles.cover} resizeMode="cover" />
+          <View style={styles.coverPlay}><Text style={styles.coverPlayText}>▶</Text></View>
+        </TouchableOpacity>
         <Text style={styles.cardTitle}>ติดตามช่อง YouTube</Text>
         <Text style={styles.cardHandle}>{YT_HANDLE}</Text>
         <Text style={styles.cardDesc}>
@@ -92,6 +95,13 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center", marginBottom: 12,
   },
   iconBadgeText: { color: "#FFFFFF", fontSize: 24, fontWeight: "800" },
+
+  coverWrap: { width: "100%", aspectRatio: 16 / 9, borderRadius: 12, overflow: "hidden",
+    marginBottom: 12, backgroundColor: "#000", alignItems: "center", justifyContent: "center" },
+  cover: { width: "100%", height: "100%" },
+  coverPlay: { position: "absolute", width: 54, height: 54, borderRadius: 27,
+    backgroundColor: "rgba(255,0,0,0.92)", alignItems: "center", justifyContent: "center" },
+  coverPlayText: { color: "#FFFFFF", fontSize: 22, fontWeight: "800", marginLeft: 3 },
 
   cardTitle: { color: "#F2F3F5", fontSize: 18, fontWeight: "800", lineHeight: 26 },
   cardHandle: { color: "#E8B339", fontSize: 14, fontWeight: "700", marginTop: 2 },

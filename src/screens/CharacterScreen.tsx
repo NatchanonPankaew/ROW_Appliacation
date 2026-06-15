@@ -1026,6 +1026,21 @@ function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, avoidK
                       </View>
                     );
                   })()}
+                  {(() => {
+                    if (!selNode || !selNode.levels) return null;
+                    const lvl = pts[selNode.kindId] || selNode.naturalMax || 1;
+                    const L = selNode.levels[lvl] || selNode.levels[String(lvl)] ||
+                      selNode.levels[selNode.naturalMax] || selNode.levels[1] || selNode.levels["1"];
+                    if (!L) return null;
+                    const cd = Number(L.cooldown) || 0, fix = Number(L.chant_fixed) || 0;
+                    const varc = Number(L.chant_float) || 0, sp = Number(L.mana_cost) || 0;
+                    const parts: string[] = [];
+                    if (cd) parts.push("คูลดาวน์ " + (cd / 1000).toFixed(1) + "s");
+                    if (fix) parts.push("ร่ายคงที่ " + (fix / 1000).toFixed(1) + "s");
+                    if (varc) parts.push("ร่ายแปรผัน " + (varc / 1000).toFixed(1) + "s");
+                    if (sp) parts.push("SP " + sp);
+                    return parts.length ? <Text style={styles.skMeta}>{parts.join("  ·  ")}</Text> : null;
+                  })()}
                   <Text style={styles.skDetailDes}>{selDes}</Text>
                 </View>
               )}
@@ -1607,6 +1622,7 @@ const styles = StyleSheet.create({
   skDpsRow: { backgroundColor: "#EAF0FF", borderRadius: 8, padding: 8, marginVertical: 6 },
   skDpsMain: { color: "#5566C7", fontSize: 15, fontWeight: "800" },
   skDpsSub: { color: "#8A97AD", fontSize: 11, fontWeight: "600", marginTop: 2 },
+  skMeta: { color: "#6E83E8", fontSize: 11, fontWeight: "700", marginBottom: 4 },
   skDetailName: { color: "#5566C7", fontSize: 13, fontWeight: "bold", marginBottom: 4 },
   skDetailDes: { color: "#5A6781", fontSize: 12, lineHeight: 18 },
 
@@ -1631,9 +1647,9 @@ const styles = StyleSheet.create({
   clear: { color: "#E0564E", fontSize: 20, fontWeight: "normal", lineHeight: 22, marginLeft: 8 },
 
   // RO-style equipment grid
-  equipGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginTop: 2 },
-  slotCell: { width: "31.5%", alignItems: "center", marginBottom: 14 },
-  slotCellLabel: { color: "#8A8F99", fontSize: 10, fontWeight: "bold", marginBottom: 3 },
+  equipGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: 2 },
+  slotCell: { width: "25%", alignItems: "center", marginBottom: 10, paddingHorizontal: 4 },
+  slotCellLabel: { color: "#8A97AD", fontSize: 9, fontWeight: "bold", marginBottom: 2 },
   slotBox: {
     width: "100%", aspectRatio: 1, borderRadius: 14, borderWidth: 2, borderColor: "#C9D6EE",
     backgroundColor: "#FBFDFF", alignItems: "center", justifyContent: "center",
@@ -1651,11 +1667,11 @@ const styles = StyleSheet.create({
   refineBadgeText: { color: "#FFFFFF", fontSize: 11, fontWeight: "800" },
   slotClear: { position: "absolute", top: 1, left: 4 },
   slotClearText: { color: "#E0564E", fontSize: 15, fontWeight: "bold" },
-  slotName: { color: "#41506B", fontSize: 11, fontWeight: "bold", marginTop: 4, maxWidth: "100%" },
-  slotNameEmpty: { color: "#A6B2C7", fontSize: 11, marginTop: 4 },
-  refineRow: { flexDirection: "row", alignItems: "center", marginTop: 3 },
-  rfBtnSm: { width: 22, height: 22, borderRadius: 11, backgroundColor: "#EAF1FB", alignItems: "center", justifyContent: "center" },
-  refineRowText: { color: "#5566C7", fontSize: 11, fontWeight: "bold", minWidth: 26, textAlign: "center" },
+  slotName: { color: "#41506B", fontSize: 9, fontWeight: "bold", marginTop: 3, maxWidth: "100%" },
+  slotNameEmpty: { color: "#A6B2C7", fontSize: 9, marginTop: 3 },
+  refineRow: { flexDirection: "row", alignItems: "center", marginTop: 2 },
+  rfBtnSm: { width: 18, height: 18, borderRadius: 9, backgroundColor: "#EAF1FB", alignItems: "center", justifyContent: "center" },
+  refineRowText: { color: "#5566C7", fontSize: 10, fontWeight: "bold", minWidth: 20, textAlign: "center" },
 
   statBox: { backgroundColor: "#FFFFFF", borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: "#DCE6F4" },
   statRow: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 10 },
