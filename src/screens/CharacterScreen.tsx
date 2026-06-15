@@ -354,7 +354,7 @@ const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
     variants: [
       { name: "ADL (ออโต้)", statOrder: ["AGI", "DEX", "LUK", "VIT", "INT"], targets: { AGI: 120, DEX: 110, LUK: 60 },
         skillBoost: ["strafe", "double", "arrow", "true sight", "concentration", "owl", "vulture", "sharp", "สเตรฟ", "ลูกศร", "แม่นยำ"] },
-      { name: "สายนก (Falcon)", statOrder: ["DEX", "LUK", "AGI", "INT", "VIT"], targets: { DEX: 110, LUK: 120, AGI: 80 },
+      { name: "สายนก (Falcon)", statOrder: ["DEX", "LUK", "AGI", "INT", "VIT"], targets: { DEX: 110, LUK: 120, AGI: 80, INT: 60 },
         skillBoost: ["falcon", "blitz", "เหยี่ยว", "นก", "beat", "assault", "crow", "steel crow"] },
       { name: "สายกับดัก (Trap)", statOrder: ["DEX", "INT", "VIT", "AGI", "LUK"], targets: { DEX: 110, INT: 90, VIT: 80 },
         skillBoost: ["trap", "กับดัก", "claymore", "blast", "land mine", "sandman", "ankle", "freezing", "flasher", "ทราป"] },
@@ -366,7 +366,7 @@ const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
     variants: [
       { name: "สายหอก (Pierce/Spiral)", statOrder: ["STR", "DEX", "VIT", "AGI"], targets: { STR: 120, DEX: 90, VIT: 90 },
         skillBoost: ["spear", "pierce", "spiral", "หอก", "แทง", "brandish"] },
-      { name: "สายดาบ 2 มือ", statOrder: ["STR", "DEX", "AGI", "VIT"], targets: { STR: 120, AGI: 90, DEX: 80 },
+      { name: "สายดาบ 2 มือ", statOrder: ["STR", "AGI", "DEX", "LUK", "VIT"], targets: { STR: 120, AGI: 90, DEX: 80, LUK: 60 },
         skillBoost: ["bowling", "bash", "two-hand", "sword", "ดาบ", "ฟัน", "magnum"] },
       // ไนท์เผา = Rune Knight Dragon Breath: ดาเมจสเกลตาม HP+SP → ไต้หวันดัน VIT+INT
       // แม็กซ์คู่กัน, DEX ดัน命中 (รวม >520), STR เก็บตกจากแต้มที่เหลือ
@@ -378,9 +378,9 @@ const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
     // Crusader / Paladin / Royal Guard
     match: ["crusader", "ครูเสด", "paladin", "พาลาดิน", "royal", "รอยัล"],
     variants: [
-      { name: "แทงค์ (Shield)", statOrder: ["VIT", "STR", "DEX", "INT"], targets: { VIT: 120, STR: 90 },
+      { name: "แทงค์ (Shield)", statOrder: ["VIT", "STR", "DEX", "INT"], targets: { VIT: 120, STR: 90, DEX: 60 },
         skillBoost: ["shield", "defending", "provoke", "guard", "โล่", "ป้องกัน", "shield chain", "overbrand"] },
-      { name: "Grand Cross", statOrder: ["VIT", "INT", "STR", "DEX"], targets: { VIT: 110, INT: 90, STR: 80 },
+      { name: "Grand Cross", statOrder: ["VIT", "INT", "STR", "DEX"], targets: { VIT: 110, INT: 90, STR: 80, DEX: 50 },
         skillBoost: ["grand cross", "holy", "cross", "กางเขน", "ศักดิ์สิทธิ์"] },
     ],
   },
@@ -388,11 +388,11 @@ const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
     // Mage / Wizard / High Wizard / Warlock
     match: ["mage", "เมจ", "wizard", "วิซ", "warlock", "วอร์ล็อก"],
     variants: [
-      { name: "สายไฟ/หิน (Meteor)", statOrder: ["INT", "DEX", "VIT", "LUK"], targets: { INT: 120, DEX: 90 },
+      { name: "สายไฟ/หิน (Meteor)", statOrder: ["INT", "DEX", "VIT", "LUK"], targets: { INT: 120, DEX: 90, VIT: 50 },
         skillBoost: ["meteor", "fire", "earth", "heaven", "ไฟ", "อุกกาบาต"] },
-      { name: "สายน้ำแข็ง/สายฟ้า", statOrder: ["INT", "DEX", "VIT", "LUK"], targets: { INT: 120, DEX: 99 },
+      { name: "สายน้ำแข็ง/สายฟ้า", statOrder: ["INT", "DEX", "VIT", "LUK"], targets: { INT: 120, DEX: 99, VIT: 50 },
         skillBoost: ["storm", "jupitel", "frost", "cold", "lightning", "vermilion", "สายฟ้า", "น้ำแข็ง"] },
-      { name: "สายบอลต์ (Bolt)", statOrder: ["INT", "DEX", "VIT", "LUK"], targets: { INT: 120, DEX: 80 },
+      { name: "สายบอลต์ (Bolt)", statOrder: ["INT", "DEX", "VIT", "LUK"], targets: { INT: 120, DEX: 80, VIT: 50 },
         skillBoost: ["bolt", "soul", "napalm", "โบลต์"] },
     ],
   },
@@ -402,7 +402,7 @@ const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
     variants: [
       { name: "ซัพพอร์ต (Full Support)", statOrder: ["INT", "DEX", "VIT", "LUK"], targets: { INT: 120, DEX: 90, VIT: 80 },
         skillBoost: ["heal", "bless", "agi", "sanctuary", "kyrie", "ฮีล", "พร", "อวยพร"] },
-      { name: "สายตีอนเดด (Turn Undead)", statOrder: ["INT", "DEX", "VIT", "LUK"], targets: { INT: 120, DEX: 99 },
+      { name: "สายตีอนเดด (Turn Undead)", statOrder: ["INT", "DEX", "VIT", "LUK"], targets: { INT: 120, DEX: 99, VIT: 60 },
         skillBoost: ["undead", "magnus", "holy light", "judex", "อนเดด", "ศักดิ์สิทธิ์"] },
     ],
   },
