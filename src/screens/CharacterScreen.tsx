@@ -798,16 +798,43 @@ function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, avoidK
           items.push({ kindId: s.kindId, nat: s.naturalMax, score });
         });
       });
-      items.sort((a, b) => b.score - a.score);
-      let progress = true, passes = 0;
-      while (progress && passes++ < 25) {
-        progress = false;
-        for (const it of items) {
-          let guard = 0;
-          while ((next[it.kindId] || 0) < it.nat && guard++ < 50) {
-            if (tryAddOne(it.kindId)) progress = true; else break;
+      const byScore = (a: Item, b: Item) => b.score - a.score;
+      const wanted = items.filter((i) => i.score >= 0).sort(byScore);   // on-build + shared
+      const offbuild = items.filter((i) => i.score < 0).sort(byScore);  // other sub-builds
+      const fillWanted = () => {
+        let progress = true, passes = 0;
+        while (progress && passes++ < 25) {
+          progress = false;
+          for (const it of wanted) {
+            let guard = 0;
+            while ((next[it.kindId] || 0) < it.nat && guard++ < 50) {
+              if (tryAddOne(it.kindId)) progress = true; else break;
+            }
           }
         }
+      };
+      fillWanted();
+      // Off-build skills are used ONLY to unlock a tier that still gates wanted
+      // skills (so the budget isn't stranded), never as pure leftover — that's
+      // why a 2H-sword build won't pour spare points into spear skills.
+      for (let t = 0; t < path.length - 1; t++) {
+        const gatesWanted = wanted.some((it) => {
+          const fn = findFn(it.kindId);
+          return fn && idxOf(fn.owner) > t && (next[it.kindId] || 0) < it.nat;
+        });
+        if (!gatesWanted) continue;
+        const limit = skillUnlockLimit(path[t]);
+        let guard = 0;
+        while (sIn(path[t]) < limit && guard++ < 200) {
+          let added = false;
+          for (const it of offbuild) {
+            const fn = findFn(it.kindId);
+            if (!fn || idxOf(fn.owner) !== t || (next[it.kindId] || 0) >= it.nat) continue;
+            if (tryAddOne(it.kindId)) { added = true; break; }
+          }
+          if (!added) break;
+        }
+        fillWanted();
       }
       return next;
     });
