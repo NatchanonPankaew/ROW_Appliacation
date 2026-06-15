@@ -577,7 +577,10 @@ function PickerModal({ title, items, iconPaths, onPick, onClose }: {
                       : <View style={[styles.icon28, styles.iconFallback]} />}
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.pickName, qi && { color: qi.color }]} numberOfLines={1}>{item.title}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center" }}>
+                      <Text style={[styles.pickName, qi && { color: qi.color }, { flexShrink: 1 }]} numberOfLines={1}>{item.title}</Text>
+                      {item.reqLevel != null && <View style={styles.lvBadge}><Text style={styles.lvBadgeText}>Lv.{item.reqLevel}</Text></View>}
+                    </View>
                     {!!line && <Text style={styles.pickStats} numberOfLines={1}>{line}</Text>}
                     {!line && !!(item.effects && item.effects[0]) && <Text style={styles.pickStats} numberOfLines={1}>{item.effects[0]}</Text>}
                   </View>
@@ -1433,7 +1436,8 @@ export default function CharacterScreen() {
                   onEndEditing={(e) => setStatValue(k, Number(e.nativeEvent.text))}
                   onSubmitEditing={(e) => setStatValue(k, Number(e.nativeEvent.text))}
                 />
-                <View style={{ flex: 1, marginLeft: 8 }}>
+                <Text style={styles.allocBonus}>+ {Math.round(((totals[k] || v) - v) * 100) / 100}</Text>
+                <View style={{ flex: 1, marginLeft: 6 }}>
                   <Text style={styles.allocRec}>
                     แนะนำ <Text style={{ color: "#E8B339" }}>{rec}</Text>{below ? "  ▲ ควรอัพ" : v > rec ? "  เกิน" : "  ✓"}
                   </Text>
@@ -1625,6 +1629,7 @@ const styles = StyleSheet.create({
   allocLabel: { color: "#C7CBD1", fontSize: 14, fontWeight: "bold", width: 46 },
   allocValue: { color: "#F2F3F5", fontSize: 18, fontWeight: "bold", width: 44, textAlign: "center" },
   allocInput: { backgroundColor: "#0E0F12", borderRadius: 8, borderWidth: 1, borderColor: "#23262D", paddingVertical: 4 },
+  allocBonus: { color: "#5DBB63", fontSize: 14, fontWeight: "bold", marginLeft: 6, minWidth: 34 },
   allocCost: { color: "#6B7079", fontSize: 11, fontWeight: "bold", flex: 1, marginLeft: 8 },
   stepBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: "#0E0F12", alignItems: "center", justifyContent: "center", marginLeft: 8 },
   stepAdd: { backgroundColor: "#E8B339" },
@@ -1661,6 +1666,8 @@ const styles = StyleSheet.create({
   pickRow: { flexDirection: "row", alignItems: "center", paddingVertical: 9 },
   pickName: { color: "#F2F3F5", fontSize: 15, fontWeight: "bold" },
   pickStats: { color: "#8A8F99", fontSize: 12, marginTop: 2 },
+  lvBadge: { backgroundColor: "#23262D", borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1, marginLeft: 6 },
+  lvBadgeText: { color: "#8A8F99", fontSize: 10, fontWeight: "bold" },
   jobCell: { flex: 1, flexDirection: "row", alignItems: "center", backgroundColor: "#0E0F12", borderRadius: 10, padding: 10, margin: 4 },
   jobName: { color: "#F2F3F5", fontSize: 13, fontWeight: "bold", flex: 1 },
   closeBtn: { backgroundColor: "#E8B339", paddingVertical: 14, borderRadius: 12, alignItems: "center", marginTop: 8 },
