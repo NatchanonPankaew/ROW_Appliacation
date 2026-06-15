@@ -25,6 +25,22 @@ function allowed(request, url) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    // simple page-view counter backed by Workers KV (binding: VIEWS)
+    if (url.pathname === "/api/views") {
+      const cors = {
+        "content-type": "application/json",
+        "access-control-allow-origin": "*",
+        "cache-control": "no-store",
+      };
+      let count = parseInt((await env.VIEWS.get("count")) || "0", 10) || 0;
+      // GET = read + increment (once per page load); HEAD/other = read only
+      if (request.method === "GET") {
+        count += 1;
+        await env.VIEWS.put("count", String(count));
+      }
+      return new Response(JSON.stringify({ count }), { headers: cors });
+    }
     // Gate the JSON dataset only. Images (/media) stay open so native <Image>
     // (which can't attach the app-key header) can still load them.
     const guarded = url.pathname.startsWith("/data/");

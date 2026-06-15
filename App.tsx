@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, useWindowDimensions } from "react-native";
 import {
   SafeAreaProvider, useSafeAreaInsets,
@@ -32,7 +32,14 @@ function Main() {
   const isWide = width >= 640;                 // PC / tablet: center a phone-width column
   const [tab, setTab] = useState<TabKey>("cards");
   const [showSupport, setShowSupport] = useState(true); // greet with the Support popup
+  const [views, setViews] = useState<number | null>(null);
   const active = TABS.find((t) => t.key === tab)!;
+
+  // page-view counter (Worker /api/views, KV-backed) — count once per load
+  useEffect(() => {
+    const url = (process.env.EXPO_PUBLIC_DATA_HOST ?? "") + "/api/views";
+    fetch(url).then((r) => r.json()).then((d) => setViews(d.count)).catch(() => {});
+  }, []);
 
   return (
     <View style={[styles.root, isWide && styles.rootWide]}>
@@ -59,6 +66,11 @@ function Main() {
 
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <Text style={styles.title}>RoworldDB - {active.label}</Text>
+        {views != null && (
+          <View style={styles.viewsBadge}>
+            <Text style={styles.viewsText}>👁 {views.toLocaleString()} ครั้ง</Text>
+          </View>
+        )}
       </View>
       <View style={styles.screen}>
         {tab === "character" ? (
@@ -103,8 +115,12 @@ const styles = StyleSheet.create({
   rootWide: { backgroundColor: "#D7E6F7" },          // soft sky letterbox on PC
   shell: { flex: 1, width: "100%", backgroundColor: "#E8F2FD" },
   shellWide: { maxWidth: 1200, alignSelf: "center" }, // room for the 2-pane layout on PC
-  header: { paddingHorizontal: 16, paddingBottom: 6, backgroundColor: "#E8F2FD" },
-  title: { color: "#41506B", fontSize: 20, fontWeight: "800", letterSpacing: 0.3 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16, paddingBottom: 6, backgroundColor: "#E8F2FD" },
+  title: { color: "#41506B", fontSize: 20, fontWeight: "800", letterSpacing: 0.3, flexShrink: 1 },
+  viewsBadge: { backgroundColor: "#FFFFFF", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4,
+    borderWidth: 1, borderColor: "#DCE6F4", marginLeft: 8 },
+  viewsText: { color: "#5566C7", fontSize: 12, fontWeight: "700" },
   screen: { flex: 1 },
   tabBar: { backgroundColor: "#FFFFFF", paddingTop: 8, borderTopWidth: 1, borderTopColor: "#DCE6F4" },
   tab: { alignItems: "center", paddingHorizontal: 14 },

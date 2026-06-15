@@ -6,6 +6,10 @@
   "name": "row-appliacation",
   "compatibility_date": "2025-06-01",
   "main": "worker/index.js",
+  // page-view counter store
+  "kv_namespaces": [
+    { "binding": "VIEWS", "id": "973ebd5b050e4b85b1063a10266bb34f" }
+  ],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
