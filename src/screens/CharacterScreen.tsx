@@ -1117,7 +1117,6 @@ export default function CharacterScreen() {
   }, [equipment]);
 
   const totals = useMemo(() => computeStats(build), [build]);
-  const totalKeys = useMemo(() => Object.keys(totals).sort(), [totals]);
   const combat = useMemo(() => computeCombat(build, totals), [build, totals]);
   const preset = useMemo(() => pickPreset(build.job?.title || ""), [build.job]);
   const jobMeta = build.job ? skillMeta[(build.job.title || "").toLowerCase()] : undefined;
@@ -1376,24 +1375,18 @@ export default function CharacterScreen() {
         {/* total stats */}
         <Text style={styles.sectionTitle}>ค่าสถานะ</Text>
         <View style={styles.statBox}>
-          {totalKeys.length === 0 ? (
-            <Text style={[styles.empty, { padding: 14 }]}>ใส่ของ/การ์ด หรือลงสเตตัสเพื่อดูค่ารวม</Text>
-          ) : totalKeys.map((k, i) => {
-            // base stats show "หน้า + หลัง" = allocated base + bonus from gear/cards
-            const isBase = BASE_STATS.includes(k.toUpperCase());
-            const base = isBase ? (build.stats[k.toUpperCase()] || 0) : 0;
-            const bonus = isBase ? Math.round((totals[k] - base) * 100) / 100 : 0;
+          {/* base stats only (STR..LUK) as "base + bonus"; gear combat stats
+              like P.DEF/ATK/Max HP belong in the ค่ารบ section, not here */}
+          {BASE_STATS.map((k, i) => {
+            const base = build.stats[k] || 0;
+            const bonus = Math.round(((totals[k] || base) - base) * 100) / 100;
             return (
               <View key={k} style={[styles.statRow, i % 2 === 1 && styles.statRowAlt]}>
-                <Text style={styles.statLabel}>{k.toUpperCase()}</Text>
-                {isBase ? (
-                  <Text style={styles.statValue}>
-                    {base}
-                    {bonus > 0 && <Text style={styles.statBonus}> + {bonus}</Text>}
-                  </Text>
-                ) : (
-                  <Text style={styles.statValue}>{totals[k]}</Text>
-                )}
+                <Text style={styles.statLabel}>{k}</Text>
+                <Text style={styles.statValue}>
+                  {base}
+                  {bonus > 0 && <Text style={styles.statBonus}> + {bonus}</Text>}
+                </Text>
               </View>
             );
           })}
