@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#0E0F12" },
   rootWide: { backgroundColor: "#0A0B0E" },          // letterbox sides on PC
   shell: { flex: 1, width: "100%" },
-  shellWide: { maxWidth: 520, alignSelf: "center" }, // phone-width column on PC
+  shellWide: { maxWidth: 760, alignSelf: "center" }, // wider centered column on PC
   header: { paddingHorizontal: 16, paddingBottom: 6, backgroundColor: "#0E0F12" },
   title: { color: "#F2F3F5", fontSize: 20, fontWeight: "800", letterSpacing: 0.3 },
   screen: { flex: 1 },

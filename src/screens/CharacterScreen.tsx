@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
   View, Text, TextInput, FlatList, ActivityIndicator,
-  TouchableOpacity, StyleSheet, Image, Modal, ScrollView,
+  TouchableOpacity, StyleSheet, Image, Modal, ScrollView, useWindowDimensions,
 } from "react-native";
 import {
   fetchData, fetchIconPaths, resolveIconUrl, qualityInfo, QUALITY,
@@ -1082,6 +1082,8 @@ function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, avoidK
 }
 
 export default function CharacterScreen() {
+  const { width: winW } = useWindowDimensions();
+  const equipCols = winW >= 640 ? 6 : 4;   // PC shows more slots per row than mobile
   const [locale, setLocale] = useState("th-TH");
   const [equipment, setEquipment] = useState<NormItem[]>([]);
   const [cards, setCards] = useState<NormItem[]>([]);
@@ -1362,7 +1364,7 @@ export default function CharacterScreen() {
             const url = it ? resolveIconUrl(it, iconPaths) : null;
             const locked = s.key === "offhand" && weaponTwoHanded;
             return (
-              <View key={s.key} style={styles.slotCell}>
+              <View key={s.key} style={[styles.slotCell, { width: `${100 / equipCols}%` }]}>
                 <Text style={styles.slotCellLabel} numberOfLines={1}>{slotLabel(s, locale)}</Text>
                 <TouchableOpacity
                   activeOpacity={0.8}
