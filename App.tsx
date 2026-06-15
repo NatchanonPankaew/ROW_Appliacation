@@ -1,5 +1,5 @@
 ﻿import React, { useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal } from "react-native";
 import {
   SafeAreaProvider, useSafeAreaInsets,
 } from "react-native-safe-area-context";
@@ -29,10 +29,31 @@ const TABS: { key: TabKey; label: string }[] = [
 function Main() {
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<TabKey>("cards");
+  const [showSupport, setShowSupport] = useState(true); // greet with the Support popup
   const active = TABS.find((t) => t.key === tab)!;
 
   return (
     <View style={styles.root}>
+      {/* launch popup: follow YouTube + donate */}
+      <Modal visible={showSupport} transparent animationType="fade"
+        onRequestClose={() => setShowSupport(false)}>
+        <View style={[styles.popupBg, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+          <View style={styles.popupCard}>
+            <View style={styles.popupHead}>
+              <Text style={styles.popupTitle}>ยินดีต้อนรับ 🎉</Text>
+              <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                onPress={() => setShowSupport(false)}>
+                <Text style={styles.popupClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={{ flex: 1 }}><SupportScreen /></View>
+            <TouchableOpacity style={styles.popupEnter} onPress={() => setShowSupport(false)}>
+              <Text style={styles.popupEnterText}>เข้าสู่แอป</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <Text style={styles.title}>RoworldDB - {active.label}</Text>
       </View>
@@ -83,4 +104,14 @@ const styles = StyleSheet.create({
   tabText: { color: "#8A8F99", fontSize: 13, fontWeight: "700" },
   tabTextOn: { color: "#E8B339" },
   dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: "#E8B339", marginTop: 3 },
+
+  popupBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "center", padding: 14 },
+  popupCard: { flex: 1, maxHeight: "92%", backgroundColor: "#0E0F12", borderRadius: 18,
+    borderWidth: 1, borderColor: "#23262D", overflow: "hidden" },
+  popupHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6 },
+  popupTitle: { color: "#E8B339", fontSize: 18, fontWeight: "800" },
+  popupClose: { color: "#8A8F99", fontSize: 18, fontWeight: "800" },
+  popupEnter: { backgroundColor: "#E8B339", margin: 12, borderRadius: 12, paddingVertical: 13, alignItems: "center" },
+  popupEnterText: { color: "#0E0F12", fontSize: 15, fontWeight: "800" },
 });
