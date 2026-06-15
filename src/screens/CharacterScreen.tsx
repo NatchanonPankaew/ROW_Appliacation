@@ -11,8 +11,8 @@ import {
 } from "../api/roworlddb";
 
 const LOCALES = ["en-US", "th-TH", "zh-TW"];
-const MAX_LEVEL = 200;        // server cap ยังทยอยปลด — ตั้งเผื่ออนาคต (4th job era)
-const STAT_CAP = 159;         // เพดานต่อ 1 สเตตัส (มาตรฐานสาย Origin/World)
+const MAX_LEVEL = 100;       // server cap ปัจจุบัน — ขยายภายหลังเมื่อเซิร์ฟปลดเลเวลเพิ่ม
+const STAT_CAP = 90;         // เพดานต่อ 1 สเตตัส (มาตรฐานสาย Origin/World)
 const MAX_REFINE = 20;
 const MAX_CARDS = 2;          // each equipment slot holds at most 2 cards
 const BASE_STATS = ["STR", "AGI", "VIT", "INT", "DEX", "LUK"];
@@ -366,7 +366,7 @@ const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
     variants: [
       { name: "สายหอก (Pierce/Spiral)", statOrder: ["STR", "DEX", "VIT", "AGI"], targets: { STR: 120, DEX: 90, VIT: 90 },
         skillBoost: ["spear", "pierce", "spiral", "หอก", "แทง", "brandish"] },
-      { name: "สายดาบ 2 มือ", statOrder: ["STR", "AGI", "DEX", "LUK", "VIT"], targets: { STR: 120, AGI: 90, DEX: 80, LUK: 60 },
+      { name: "สายดาบ 2 มือ", statOrder: ["STR", "AGI", "LUK", "VIT"], targets: { STR: 120, AGI: 90, LUK: 60 },
         skillBoost: ["bowling", "bash", "two-hand", "sword", "ดาบ", "ฟัน", "magnum"] },
       // ไนท์เผา = Rune Knight Dragon Breath: ดาเมจสเกลตาม HP+SP → ไต้หวันดัน VIT+INT
       // แม็กซ์คู่กัน, DEX ดัน命中 (รวม >520), STR เก็บตกจากแต้มที่เหลือ
