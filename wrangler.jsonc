@@ -1,13 +1,17 @@
 {
-  // Cloudflare Workers "Static Assets" — serves the Expo web export in ./dist as
-  // a static site (no server code). The dataset (/data) and images (/media) live
-  // under dist too, so everything is same-origin (no CORS).
+  // Cloudflare Worker + Static Assets. The Worker (worker/index.js) runs first so
+  // it can gate /data and /media (self-hosted dataset + images) to same-origin
+  // requests only — deterring hotlinking/scraping. Everything else is served from
+  // ./dist as a normal static SPA.
   "name": "row-appliacation",
   "compatibility_date": "2025-06-01",
+  "main": "worker/index.js",
   "assets": {
     "directory": "./dist",
-    // SPA: unknown routes fall back to index.html (real files like /data/* and
-    // /media/* are served directly and always win over this fallback).
+    "binding": "ASSETS",
+    // run the Worker before serving assets (otherwise static files bypass it)
+    "run_worker_first": true,
+    // SPA: unknown routes fall back to index.html
     "not_found_handling": "single-page-application"
   }
 }
