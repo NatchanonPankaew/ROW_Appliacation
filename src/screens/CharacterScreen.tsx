@@ -1338,51 +1338,59 @@ export default function CharacterScreen() {
 
         {/* equipment — fixed 10 slots */}
         <Text style={styles.sectionTitle}>อุปกรณ์</Text>
-        {SLOTS.map((s) => {
-          const sl = getSlot(s.key);
-          const it = sl.item;
-          const q = it ? qualityInfo(it.quality) : null;
-          const url = it ? resolveIconUrl(it, iconPaths) : null;
-          const lockedByTwoH = s.key === "offhand" && weaponTwoHanded;
-          if (lockedByTwoH) {
+        {/* RO-style equipment grid: square slot cells with quality-framed icons */}
+        <View style={styles.equipGrid}>
+          {SLOTS.map((s) => {
+            const sl = getSlot(s.key);
+            const it = sl.item;
+            const q = it ? qualityInfo(it.quality) : null;
+            const url = it ? resolveIconUrl(it, iconPaths) : null;
+            const locked = s.key === "offhand" && weaponTwoHanded;
             return (
-              <View key={s.key} style={[styles.equipRow, styles.equipLocked]}>
-                <Text style={styles.equipSlot}>{slotLabel(s, locale)}</Text>
-                <View style={[styles.iconBox, styles.iconFallback]} />
-                <Text style={styles.lockedText}>ใช้อาวุธ 2 มือ</Text>
+              <View key={s.key} style={styles.slotCell}>
+                <Text style={styles.slotCellLabel} numberOfLines={1}>{slotLabel(s, locale)}</Text>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  disabled={locked}
+                  onPress={() => setPicker({ kind: "item", slot: s.key })}
+                  style={[styles.slotBox, q && { borderColor: q.color }, locked && styles.slotLocked]}
+                >
+                  {locked ? (
+                    <Text style={styles.slotLockedText}>2มือ</Text>
+                  ) : url ? (
+                    <Image source={{ uri: url }} style={styles.slotIcon} resizeMode="contain" />
+                  ) : (
+                    <Text style={styles.slotPlus}>＋</Text>
+                  )}
+                  {!!it && !!qRoman(it.quality) && (
+                    <View style={[styles.tierCorner, q && { borderColor: q.color }]}>
+                      <Text style={[styles.tierCornerText, q && { color: q.color }]}>{qRoman(it.quality)}</Text>
+                    </View>
+                  )}
+                  {!!it && sl.refine > 0 && (
+                    <View style={styles.refineBadge}><Text style={styles.refineBadgeText}>+{sl.refine}</Text></View>
+                  )}
+                  {!!it && (
+                    <TouchableOpacity style={styles.slotClear} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      onPress={() => clearSlot(s.key)}><Text style={styles.slotClearText}>×</Text></TouchableOpacity>
+                  )}
+                </TouchableOpacity>
+                {it ? (
+                  <>
+                    <Text style={[styles.slotName, q && { color: q.color }]} numberOfLines={1}>{it.title}</Text>
+                    <View style={styles.refineRow}>
+                      <TouchableOpacity style={styles.rfBtnSm} onPress={() => setRefine(s.key, -1)}><Text style={styles.rfBtnText}>−</Text></TouchableOpacity>
+                      <Text style={styles.refineRowText}>+{sl.refine}</Text>
+                      <TouchableOpacity style={styles.rfBtnSm} onPress={() => setRefine(s.key, 1)}><Text style={styles.rfBtnText}>+</Text></TouchableOpacity>
+                    </View>
+                  </>
+                ) : (
+                  <Text style={styles.slotNameEmpty} numberOfLines={1}>{locked ? "ล็อก" : "ว่าง"}</Text>
+                )}
               </View>
             );
-          }
-          return (
-            <View key={s.key} style={styles.equipRow}>
-              <Text style={styles.equipSlot}>{slotLabel(s, locale)}</Text>
-              <TouchableOpacity style={styles.equipMain} activeOpacity={0.7} onPress={() => setPicker({ kind: "item", slot: s.key })}>
-                <View style={[styles.iconBox, q && { borderColor: q.color, borderWidth: 1.5 }]}>
-                  {url ? <Image source={{ uri: url }} style={styles.icon28} resizeMode="contain" /> : <View style={[styles.icon28, styles.iconFallback]} />}
-                </View>
-                <View style={{ flex: 1 }}>
-                  {it ? (
-                    <View style={{ flexDirection: "row", alignItems: "center" }}>
-                      {!!qRoman(it.quality) && (
-                        <View style={[styles.tier, q && { borderColor: q.color }]}><Text style={[styles.tierText, q && { color: q.color }]}>{qRoman(it.quality)}</Text></View>
-                      )}
-                      <Text style={[styles.equipName, q && { color: q.color }]} numberOfLines={1}>{it.title}</Text>
-                      {it.twoHanded && <View style={styles.twoHBadge}><Text style={styles.twoHText}>2มือ</Text></View>}
-                    </View>
-                  ) : <Text style={styles.equipEmpty}>+ เลือกอุปกรณ์</Text>}
-                </View>
-              </TouchableOpacity>
-              {it ? (
-                <View style={styles.refineCtrl}>
-                  <TouchableOpacity style={styles.rfBtn} onPress={() => setRefine(s.key, -1)}><Text style={styles.rfBtnText}>−</Text></TouchableOpacity>
-                  <Text style={styles.rfText}>+{sl.refine}</Text>
-                  <TouchableOpacity style={styles.rfBtn} onPress={() => setRefine(s.key, 1)}><Text style={styles.rfBtnText}>+</Text></TouchableOpacity>
-                  <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => clearSlot(s.key)}><Text style={styles.clear}>×</Text></TouchableOpacity>
-                </View>
-              ) : null}
-            </View>
-          );
-        })}
+          })}
+        </View>
 
         {/* total stats */}
         <Text style={styles.sectionTitle}>ค่าสถานะ</Text>
@@ -1623,6 +1631,33 @@ const styles = StyleSheet.create({
   rfBtnText: { color: "#E8B339", fontSize: 15, fontWeight: "bold", lineHeight: 16 },
   rfText: { color: "#E8B339", fontSize: 13, fontWeight: "bold", minWidth: 30, textAlign: "center" },
   clear: { color: "#E06C6C", fontSize: 20, fontWeight: "normal", lineHeight: 22, marginLeft: 8 },
+
+  // RO-style equipment grid
+  equipGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginTop: 2 },
+  slotCell: { width: "31.5%", alignItems: "center", marginBottom: 14 },
+  slotCellLabel: { color: "#8A8F99", fontSize: 10, fontWeight: "bold", marginBottom: 3 },
+  slotBox: {
+    width: "100%", aspectRatio: 1, borderRadius: 10, borderWidth: 2, borderColor: "#3A3F48",
+    backgroundColor: "#0B0C0F", alignItems: "center", justifyContent: "center",
+    // subtle inner bevel like a game item cell
+    shadowColor: "#000", shadowOpacity: 0.4, shadowRadius: 3, shadowOffset: { width: 0, height: 1 },
+  },
+  slotIcon: { width: "76%", height: "76%" },
+  slotPlus: { color: "#3A3F48", fontSize: 26, fontWeight: "bold" },
+  slotLocked: { opacity: 0.5, borderStyle: "dashed" },
+  slotLockedText: { color: "#6B7079", fontSize: 11, fontWeight: "bold" },
+  tierCorner: { position: "absolute", bottom: 2, left: 2, borderWidth: 1, borderColor: "#3A3F48",
+    backgroundColor: "#0B0C0F", borderRadius: 3, paddingHorizontal: 3 },
+  tierCornerText: { color: "#8A8F99", fontSize: 8, fontWeight: "bold" },
+  refineBadge: { position: "absolute", top: 2, right: 2, backgroundColor: "#E8B339", borderRadius: 4, paddingHorizontal: 4, paddingVertical: 0 },
+  refineBadgeText: { color: "#0E0F12", fontSize: 10, fontWeight: "800" },
+  slotClear: { position: "absolute", top: 1, left: 3 },
+  slotClearText: { color: "#E06C6C", fontSize: 15, fontWeight: "bold" },
+  slotName: { color: "#F2F3F5", fontSize: 11, fontWeight: "bold", marginTop: 4, maxWidth: "100%" },
+  slotNameEmpty: { color: "#4A4F57", fontSize: 11, marginTop: 4 },
+  refineRow: { flexDirection: "row", alignItems: "center", marginTop: 3 },
+  rfBtnSm: { width: 22, height: 22, borderRadius: 11, backgroundColor: "#16181D", alignItems: "center", justifyContent: "center" },
+  refineRowText: { color: "#E8B339", fontSize: 11, fontWeight: "bold", minWidth: 26, textAlign: "center" },
 
   statBox: { backgroundColor: "#16181D", borderRadius: 12, overflow: "hidden" },
   statRow: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 10 },
