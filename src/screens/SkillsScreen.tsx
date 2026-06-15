@@ -30,9 +30,26 @@ function skillDesc(s: SkillNode): string {
   return lv ? stripTags(lv.des || lv.skilldes || "") : "";
 }
 
+// cooldown / cast time / SP for a skill (at its natural max level)
+function castInfo(s: SkillNode): string {
+  if (!s.levels) return "";
+  const lvl = s.naturalMax || s.maxLevel || 1;
+  const L = s.levels[lvl] || s.levels[String(lvl)] || s.levels[1] || s.levels["1"];
+  if (!L) return "";
+  const cd = Number(L.cooldown) || 0;
+  const cast = (Number(L.chant_fixed) || 0) + (Number(L.chant_float) || 0);
+  const sp = Number(L.mana_cost) || 0;
+  const parts: string[] = [];
+  if (cd) parts.push("คูลดาวน์ " + (cd / 1000).toFixed(cd % 1000 ? 1 : 0) + "s");
+  if (!s.passive) parts.push(cast ? "ร่าย " + (cast / 1000).toFixed(1) + "s" : "ร่ายทันที");
+  if (sp) parts.push("SP " + sp);
+  return parts.join("  ·  ");
+}
+
 /* ---- one skill row inside the detail sheet ---- */
 function SkillRow({ skill, iconUrl }: { skill: SkillNode; iconUrl: string | null }) {
   const desc = skillDesc(skill);
+  const cast = castInfo(skill);
   return (
     <View style={styles.skillRow}>
       <View style={styles.skillIconWrap}>
@@ -50,6 +67,7 @@ function SkillRow({ skill, iconUrl }: { skill: SkillNode; iconUrl: string | null
           </View>
         </View>
         <Text style={styles.skillMeta}>เลเวลสูงสุด {skill.maxLevel}</Text>
+        {!!cast && <Text style={styles.skillCast}>{cast}</Text>}
         {!!desc && <Text style={styles.skillDesc} numberOfLines={4}>{desc}</Text>}
       </View>
     </View>
@@ -317,6 +335,7 @@ const styles = StyleSheet.create({
   passiveBadge: { backgroundColor: "#3FB57E" },
   kindBadgeText: { color: "#FFFFFF", fontSize: 10, fontWeight: "bold", lineHeight: 15 },
   skillMeta: { color: "#8A97AD", fontSize: 12, lineHeight: 18 },
+  skillCast: { color: "#6E83E8", fontSize: 12, fontWeight: "700", lineHeight: 18, marginTop: 1 },
   skillDesc: { color: "#5A6781", fontSize: 13, lineHeight: 19, marginTop: 3 },
 
   closeBtn: { marginTop: 14, backgroundColor: "#6E83E8", borderRadius: 10,

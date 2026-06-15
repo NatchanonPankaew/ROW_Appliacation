@@ -1035,9 +1035,10 @@ function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, avoidK
                     const cd = Number(L.cooldown) || 0, fix = Number(L.chant_fixed) || 0;
                     const varc = Number(L.chant_float) || 0, sp = Number(L.mana_cost) || 0;
                     const parts: string[] = [];
-                    if (cd) parts.push("คูลดาวน์ " + (cd / 1000).toFixed(1) + "s");
+                    if (cd) parts.push("คูลดาวน์ " + (cd / 1000).toFixed(cd % 1000 ? 1 : 0) + "s");
                     if (fix) parts.push("ร่ายคงที่ " + (fix / 1000).toFixed(1) + "s");
                     if (varc) parts.push("ร่ายแปรผัน " + (varc / 1000).toFixed(1) + "s");
+                    if (!selNode.passive && !fix && !varc) parts.push("ร่ายทันที");
                     if (sp) parts.push("SP " + sp);
                     return parts.length ? <Text style={styles.skMeta}>{parts.join("  ·  ")}</Text> : null;
                   })()}
@@ -1048,8 +1049,8 @@ function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, avoidK
           )}
 
           <View style={{ flexDirection: "row", marginTop: 8 }}>
-            <TouchableOpacity style={[styles.closeBtn, { flex: 1, marginRight: 6, backgroundColor: "#16181D", borderWidth: 1, borderColor: "#3A3F48" }]} onPress={() => setPts({})}>
-              <Text style={[styles.closeText, { color: "#C7CBD1" }]}>รีเซ็ต</Text>
+            <TouchableOpacity style={[styles.closeBtn, { flex: 1, marginRight: 6, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#C9D6EE" }]} onPress={() => setPts({})}>
+              <Text style={[styles.closeText, { color: "#5566C7" }]}>รีเซ็ต</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.closeBtn, { flex: 1, marginLeft: 6 }]} onPress={onClose}><Text style={styles.closeText}>ปิด</Text></TouchableOpacity>
           </View>
