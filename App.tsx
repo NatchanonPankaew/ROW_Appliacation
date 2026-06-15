@@ -99,26 +99,26 @@ export default function App(): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#0E0F12" },
-  rootWide: { backgroundColor: "#0A0B0E" },          // letterbox sides on PC
-  shell: { flex: 1, width: "100%" },
+  root: { flex: 1, backgroundColor: "#E8F2FD" },
+  rootWide: { backgroundColor: "#D7E6F7" },          // soft sky letterbox on PC
+  shell: { flex: 1, width: "100%", backgroundColor: "#E8F2FD" },
   shellWide: { maxWidth: 1200, alignSelf: "center" }, // room for the 2-pane layout on PC
-  header: { paddingHorizontal: 16, paddingBottom: 6, backgroundColor: "#0E0F12" },
-  title: { color: "#F2F3F5", fontSize: 20, fontWeight: "800", letterSpacing: 0.3 },
+  header: { paddingHorizontal: 16, paddingBottom: 6, backgroundColor: "#E8F2FD" },
+  title: { color: "#41506B", fontSize: 20, fontWeight: "800", letterSpacing: 0.3 },
   screen: { flex: 1 },
-  tabBar: { backgroundColor: "#16181D", paddingTop: 8, borderTopWidth: 1, borderTopColor: "#23262D" },
+  tabBar: { backgroundColor: "#FFFFFF", paddingTop: 8, borderTopWidth: 1, borderTopColor: "#DCE6F4" },
   tab: { alignItems: "center", paddingHorizontal: 14 },
-  tabText: { color: "#8A8F99", fontSize: 13, fontWeight: "700" },
-  tabTextOn: { color: "#E8B339" },
-  dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: "#E8B339", marginTop: 3 },
+  tabText: { color: "#8A97AD", fontSize: 13, fontWeight: "700" },
+  tabTextOn: { color: "#5566C7" },
+  dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: "#6E83E8", marginTop: 3 },
 
-  popupBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "center", padding: 14 },
-  popupCard: { flex: 1, maxHeight: "92%", backgroundColor: "#0E0F12", borderRadius: 18,
-    borderWidth: 1, borderColor: "#23262D", overflow: "hidden" },
+  popupBg: { flex: 1, backgroundColor: "rgba(40,60,100,0.5)", justifyContent: "center", padding: 14 },
+  popupCard: { flex: 1, maxHeight: "92%", backgroundColor: "#E8F2FD", borderRadius: 18,
+    borderWidth: 1, borderColor: "#DCE6F4", overflow: "hidden" },
   popupHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6 },
-  popupTitle: { color: "#E8B339", fontSize: 18, fontWeight: "800" },
-  popupClose: { color: "#8A8F99", fontSize: 18, fontWeight: "800" },
-  popupEnter: { backgroundColor: "#E8B339", margin: 12, borderRadius: 12, paddingVertical: 13, alignItems: "center" },
-  popupEnterText: { color: "#0E0F12", fontSize: 15, fontWeight: "800" },
+  popupTitle: { color: "#5566C7", fontSize: 18, fontWeight: "800" },
+  popupClose: { color: "#8A97AD", fontSize: 18, fontWeight: "800" },
+  popupEnter: { backgroundColor: "#6E83E8", margin: 12, borderRadius: 12, paddingVertical: 13, alignItems: "center" },
+  popupEnterText: { color: "#FFFFFF", fontSize: 15, fontWeight: "800" },
 });

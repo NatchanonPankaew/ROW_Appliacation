@@ -76,15 +76,17 @@ export default function SupportScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0E0F12" },
+  container: { flex: 1, backgroundColor: "#E8F2FD" },
   content: { padding: 16, paddingBottom: 32 },
 
   card: {
-    backgroundColor: "#16181D",
+    backgroundColor: "#FFFFFF",
     borderRadius: 16,
     padding: 20,
     marginBottom: 16,
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#DCE6F4",
   },
   iconBadgeYt: {
     width: 56, height: 56, borderRadius: 28, backgroundColor: "#FF0000",
@@ -103,10 +105,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,0,0,0.92)", alignItems: "center", justifyContent: "center" },
   coverPlayText: { color: "#FFFFFF", fontSize: 22, fontWeight: "800", marginLeft: 3 },
 
-  cardTitle: { color: "#F2F3F5", fontSize: 18, fontWeight: "800", lineHeight: 26 },
-  cardHandle: { color: "#E8B339", fontSize: 14, fontWeight: "700", marginTop: 2 },
+  cardTitle: { color: "#41506B", fontSize: 18, fontWeight: "800", lineHeight: 26 },
+  cardHandle: { color: "#5566C7", fontSize: 14, fontWeight: "700", marginTop: 2 },
   cardDesc: {
-    color: "#C7CBD1", fontSize: 14, lineHeight: 21, marginTop: 8,
+    color: "#5A6781", fontSize: 14, lineHeight: 21, marginTop: 8,
     textAlign: "center",
   },
 
@@ -118,11 +120,12 @@ const styles = StyleSheet.create({
 
   qrWrap: {
     backgroundColor: "#FFFFFF", borderRadius: 14, padding: 14, marginTop: 16,
+    borderWidth: 1, borderColor: "#DCE6F4",
   },
   qr: { width: 220, height: 220 },
 
-  donateLabel: { color: "#8A8F99", fontSize: 12, fontWeight: "700", marginTop: 12 },
-  donateValue: { color: "#F2F3F5", fontSize: 15, fontWeight: "700", marginTop: 2 },
+  donateLabel: { color: "#8A97AD", fontSize: 12, fontWeight: "700", marginTop: 12 },
+  donateValue: { color: "#41506B", fontSize: 15, fontWeight: "700", marginTop: 2 },
 
-  footer: { color: "#6B7079", fontSize: 13, textAlign: "center", marginTop: 8 },
+  footer: { color: "#8A97AD", fontSize: 13, textAlign: "center", marginTop: 8 },
 });
