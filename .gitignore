@@ -91,3 +91,8 @@ web-build/
 # committed to keep the repo lean.
 /public/data/
 /public/media/
+
+# Expo
+.expo
+dist/
+web-build/

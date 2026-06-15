@@ -3,5 +3,6 @@
 declare const process: {
   env: {
     EXPO_PUBLIC_DATA_HOST?: string;
+    EXPO_PUBLIC_APP_KEY?: string;
   } & Record<string, string | undefined>;
 };

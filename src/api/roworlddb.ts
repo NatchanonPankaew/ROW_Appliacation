@@ -160,8 +160,11 @@ function deobfuscate(buf: ArrayBuffer): string {
   return utf8(out);
 }
 
+// Native builds fetch cross-origin, so the same-origin gate on /data + /media
+// would 403 them — send the shared app key so the Worker lets them through.
+const APP_KEY = process.env.EXPO_PUBLIC_APP_KEY;
 async function getJSON(url: string) {
-  const res = await fetch(url);
+  const res = await fetch(url, APP_KEY ? { headers: { "x-app-key": APP_KEY } } : undefined);
   if (!res.ok) throw new Error("HTTP " + res.status);
   return JSON.parse(deobfuscate(await res.arrayBuffer()));
 }

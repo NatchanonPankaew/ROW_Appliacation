@@ -10,7 +10,7 @@
 // NOTE: native (Android/iOS) builds load from EXPO_PUBLIC_DATA_HOST cross-origin
 // and would be blocked. If you ship native, send a shared secret header from the
 // app and allow it here (see ALLOW_TOKEN below).
-const ALLOW_TOKEN = ""; // set to a secret and have native send `x-app-key: <token>` if needed
+const ALLOW_TOKEN = "mimir-7sK2pZ9q-app"; // native sends this as `x-app-key` (EXPO_PUBLIC_APP_KEY)
 
 function allowed(request, url) {
   if (ALLOW_TOKEN && request.headers.get("x-app-key") === ALLOW_TOKEN) return true;
@@ -25,7 +25,9 @@ function allowed(request, url) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    const guarded = url.pathname.startsWith("/data/") || url.pathname.startsWith("/media/");
+    // Gate the JSON dataset only. Images (/media) stay open so native <Image>
+    // (which can't attach the app-key header) can still load them.
+    const guarded = url.pathname.startsWith("/data/");
     if (guarded && !allowed(request, url)) {
       return new Response("Forbidden", {
         status: 403,
