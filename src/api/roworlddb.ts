@@ -129,10 +129,41 @@ export const KIND_HAS_QUALITY: Record<Kind, boolean> = {
   monsters: false, skills: false, maps: false, apocalypse: false,
 };
 
+// Lightweight response obfuscation. Production data files are XOR-scrambled with
+// a 4-byte magic header by scripts/obfuscate-data.mjs, so the raw response isn't
+// readable in DevTools. Deterrent only — the key ships in the bundle. Dev-server
+// files are served raw, so we detect the magic header and fall back to plain text.
+const OBF_KEY = "rw#7sK2!pZ9q";
+const OBF_MAGIC = [0x52, 0x4f, 0x57, 0x31]; // "ROW1"
+const _TD = (globalThis as any).TextDecoder;
+function utf8(b: Uint8Array): string {
+  if (_TD) return new _TD().decode(b);
+  let s = "", i = 0;
+  while (i < b.length) {
+    const c = b[i++];
+    if (c < 0x80) s += String.fromCharCode(c);
+    else if (c < 0xe0) s += String.fromCharCode(((c & 0x1f) << 6) | (b[i++] & 0x3f));
+    else if (c < 0xf0) s += String.fromCharCode(((c & 0x0f) << 12) | ((b[i++] & 0x3f) << 6) | (b[i++] & 0x3f));
+    else {
+      const cp = ((c & 0x07) << 18) | ((b[i++] & 0x3f) << 12) | ((b[i++] & 0x3f) << 6) | (b[i++] & 0x3f) - 0x10000;
+      s += String.fromCharCode(0xd800 + (cp >> 10), 0xdc00 + (cp & 0x3ff));
+    }
+  }
+  return s;
+}
+function deobfuscate(buf: ArrayBuffer): string {
+  const b = new Uint8Array(buf);
+  const tagged = b.length >= 4 && OBF_MAGIC.every((m, i) => b[i] === m);
+  if (!tagged) return utf8(b); // raw JSON (dev server)
+  const out = new Uint8Array(b.length - 4);
+  for (let i = 4; i < b.length; i++) out[i - 4] = b[i] ^ OBF_KEY.charCodeAt((i - 4) % OBF_KEY.length);
+  return utf8(out);
+}
+
 async function getJSON(url: string) {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  const res = await fetch(url);
   if (!res.ok) throw new Error("HTTP " + res.status);
-  return res.json();
+  return JSON.parse(deobfuscate(await res.arrayBuffer()));
 }
 
 let _iconCache: IconPaths | null = null;

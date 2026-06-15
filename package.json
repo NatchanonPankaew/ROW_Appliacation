@@ -10,7 +10,7 @@
     "start": "react-native start",
     "test": "jest",
     "web": "expo start --web",
-    "build:web": "expo export --platform web --output-dir dist",
+    "build:web": "expo export --platform web --output-dir dist && node scripts/obfuscate-data.mjs",
     "sync:data": "node scripts/sync-data.mjs",
     "sync:images": "node scripts/sync-images.mjs"
   },
