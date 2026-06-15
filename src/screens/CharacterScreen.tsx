@@ -31,8 +31,13 @@ const SLOTS: SlotDef[] = [
   { key: "garment",   labels: { "th-TH": "ผ้าคลุม", "en-US": "Garment", "zh-TW": "披風" },   aliases: ["披風", "ผ้าคลุม", "garment", "cape"] },
   { key: "back",      labels: { "th-TH": "หลัง", "en-US": "Back", "zh-TW": "背飾" },         aliases: ["背飾", "หลัง", "back"] },
   { key: "shoes",     labels: { "th-TH": "รองเท้า", "en-US": "Shoes", "zh-TW": "鞋子" },     aliases: ["鞋子", "รองเท้า", "shoes", "footgear", "boots"] },
-  { key: "accessory", labels: { "th-TH": "เครื่องประดับ", "en-US": "Accessory", "zh-TW": "飾品" }, aliases: ["飾品", "เครื่องประดับ", "accessory"] },
+  // RO has two accessory slots — both draw from the same accessory item pool.
+  { key: "accessory1", labels: { "th-TH": "เครื่องประดับ 1", "en-US": "Accessory 1", "zh-TW": "飾品1" }, aliases: ["飾品", "เครื่องประดับ", "accessory"] },
+  { key: "accessory2", labels: { "th-TH": "เครื่องประดับ 2", "en-US": "Accessory 2", "zh-TW": "飾品2" }, aliases: [] },
 ];
+// slot keys that share the accessory item/card pool
+const ACCESSORY_KEYS = ["accessory1", "accessory2"];
+const poolKeyOf = (k: string) => (ACCESSORY_KEYS.includes(k) ? "accessory" : k);
 const ALIAS_TO_KEY: Record<string, string> = {};
 SLOTS.forEach((s) => s.aliases.forEach((a) => (ALIAS_TO_KEY[a.toLowerCase()] = s.key)));
 const slotLabel = (def: SlotDef, locale: string) => def.labels[locale] || def.labels["en-US"];
@@ -1200,7 +1205,7 @@ export default function CharacterScreen() {
   // job can actually equip at this class level shows up.
   const pickerSlotItems = (k?: string): NormItem[] => {
     if (!k) return [];
-    let m = bySlot[k] || [];
+    let m = bySlot[poolKeyOf(k)] || [];
     // Assassin lines can dual-wield: the off-hand may hold a second ONE-handed
     // weapon (dagger), so add one-handed weapons to the off-hand picker.
     const isDualWield = !!build.job && /assassin|แอส|cross|guillotine|กิโยติน/i.test(build.job.title || "");
@@ -1222,7 +1227,7 @@ export default function CharacterScreen() {
   // cards selectable for a slot: only cards whose type matches (weapon card -> weapon, ...)
   const cardsForSlot = (k?: string): NormItem[] => {
     if (!k) return cards;
-    const f = cards.filter((c) => c.slotKey === k);
+    const f = cards.filter((c) => c.slotKey === poolKeyOf(k));
     return f.length ? f : cards;                  // fallback if no typed match
   };
 
