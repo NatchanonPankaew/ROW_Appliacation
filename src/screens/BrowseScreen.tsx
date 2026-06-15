@@ -278,8 +278,7 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
       )}
 
       {filtersOpen && (
-      <ScrollView style={styles.filterArea} nestedScrollEnabled
-        contentContainerStyle={styles.filterAreaContent}>
+      <View style={styles.filterAreaContent}>
       {slotChips.length > 1 && (
         <View style={styles.filterRow}>
           <TouchableOpacity onPress={() => setSlotFilter(null)}
@@ -333,7 +332,7 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
           })}
         </View>
       )}
-      </ScrollView>
+      </View>
       )}
 
       {loading ? (

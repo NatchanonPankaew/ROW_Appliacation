@@ -906,17 +906,25 @@ export async function fetchJobSkills(jobId: number | string, locale: string): Pr
   const d = await getJSON(BASE_DATA + "/skill-simulator/data/jobs_" + locale + "/" + jobId + ".json");
   const job = d.job || d;
   const raw = job.skills || {};
-  const skills: SkillNode[] = Object.entries(raw).map(([kindId, s]: [string, any]) => ({
-    kindId,
-    name: stripColorTags(s.name || s.skilldes || "Skill " + kindId),
-    icon: s.icon,
-    position: Number.isFinite(Number(s.position)) && Number(s.position) > 0 ? Number(s.position) : 999,
-    maxLevel: Number(s.max_level) || Number(s.natural_max_level) || 10,
-    naturalMax: Number(s.natural_max_level) || Number(s.max_level) || 10,
-    preSkill: Array.isArray(s.pre_skill) ? s.pre_skill.map(Number) : [],
-    passive: Number(s.skill_type) === 2,
-    levels: s.levels,
-  }));
+  const skills: SkillNode[] = Object.entries(raw).map(([kindId, s]: [string, any]) => {
+    // skill_type is absent in this dataset; passive is marked by a "พาสซีฟ"/
+    // "Passive" tag inside levels[].skill_tags instead.
+    const lv0 = s.levels ? (s.levels["1"] || s.levels[1] || Object.values(s.levels)[0]) : null;
+    const tags: any[] = (lv0 && lv0.skill_tags) || [];
+    const passive = Array.isArray(tags) &&
+      tags.some((t) => /passive|พาสซีฟ|被動|被动/i.test(String(t?.name || "")));
+    return {
+      kindId,
+      name: stripColorTags(s.name || s.skilldes || "Skill " + kindId),
+      icon: s.icon,
+      position: Number.isFinite(Number(s.position)) && Number(s.position) > 0 ? Number(s.position) : 999,
+      maxLevel: Number(s.max_level) || Number(s.natural_max_level) || 10,
+      naturalMax: Number(s.natural_max_level) || Number(s.max_level) || 10,
+      preSkill: Array.isArray(s.pre_skill) ? s.pre_skill.map(Number) : [],
+      passive,
+      levels: s.levels,
+    };
+  });
   skills.sort((a, b) => a.position - b.position || Number(a.kindId) - Number(b.kindId));
   return { skills, jobName: stripColorTags(job.job_name || "") };
 }

@@ -107,15 +107,27 @@ function JobSkillsModal({ jobId, index, locale, iconPaths, onClose }: {
               {path.map((id) => {
                 const list = skills[id] || [];
                 if (!list.length) return null;
+                // keep Active and Passive skills apart (don't mix them)
+                const actives = list.filter((s) => !s.passive);
+                const passives = list.filter((s) => s.passive);
                 return (
                   <View key={id} style={{ marginBottom: 8 }}>
                     <View style={styles.tierHead}>
                       <Text style={styles.tierTitle}>{index[id]?.name}</Text>
                       <Text style={styles.tierCount}>{list.length}</Text>
                     </View>
-                    {list.map((s) => (
-                      <SkillRow key={s.kindId} skill={s} iconUrl={skillIcon(s.icon)} />
-                    ))}
+                    {actives.length > 0 && (
+                      <>
+                        <Text style={styles.groupHead}>Active · ออกฤทธิ์ ({actives.length})</Text>
+                        {actives.map((s) => <SkillRow key={s.kindId} skill={s} iconUrl={skillIcon(s.icon)} />)}
+                      </>
+                    )}
+                    {passives.length > 0 && (
+                      <>
+                        <Text style={styles.groupHead}>Passive · พาสซีฟ ({passives.length})</Text>
+                        {passives.map((s) => <SkillRow key={s.kindId} skill={s} iconUrl={skillIcon(s.icon)} />)}
+                      </>
+                    )}
                   </View>
                 );
               })}
@@ -288,6 +300,7 @@ const styles = StyleSheet.create({
 
   tierHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     paddingTop: 10, paddingBottom: 6 },
+  groupHead: { color: "#8A8F99", fontSize: 12, fontWeight: "bold", marginTop: 6, marginBottom: 2, marginLeft: 2 },
   tierTitle: { color: "#E8B339", fontSize: 15, fontWeight: "bold", lineHeight: 22 },
   tierCount: { color: "#6B7079", fontSize: 12, fontWeight: "bold" },
 
