@@ -11,7 +11,7 @@ AppRegistry.registerComponent(appName, () => App);
 // On web there's no native host to call runApplication for us, so mount the app
 // into a #root element ourselves. This branch is stripped from native bundles.
 if (Platform.OS === 'web') {
-  require('@expo/metro-runtime'); // enables Fast Refresh / web runtime
+  require('./metro-runtime-web'); // web: @expo/metro-runtime; native: no-op stub
   const rootTag =
     document.getElementById('root') ||
     (() => {
