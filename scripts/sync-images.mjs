@@ -96,6 +96,11 @@ async function collect() {
     Object.values(runes?.baseItems || {}).forEach((r) =>
       add(r.icon || ELEMENT_ICON[r.element])
     );
+    // rune-type (ember) icons: /media/images/ember/<icon>_<elementId>.webp
+    Object.values(runes?.effectGroups || {}).forEach((g) => {
+      if (g?.icon) add(undefined, `ember/${g.icon}_${g.elementId}.webp`);
+      else add(ELEMENT_ICON[g?.elementId]);
+    });
 
     const idx = await readJSON(`skill-simulator/data/skills_index_${loc}.json`);
     const jobs = idx?.jobs || idx || {};

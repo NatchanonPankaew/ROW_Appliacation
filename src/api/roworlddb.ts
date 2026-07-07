@@ -856,8 +856,10 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
         id: g.group,
         title: stripColorTags(g.name),
         subtitle: elName,
-        // ember icons aren't published upstream; reuse the element's stone icon
-        iconName: ELEMENT_ICON[g.elementId] || undefined,
+        // ember icons live at /media/images/ember/<icon>_<elementId>.webp (not in
+        // icon_paths), so pass them via iconUrl; stone icon as last-resort fallback
+        iconName: g.icon ? undefined : ELEMENT_ICON[g.elementId] || undefined,
+        iconUrl: g.icon ? "ember/" + g.icon + "_" + g.elementId + ".webp" : undefined,
         effects,
         slotKey: elName || undefined,
         slot: elName || undefined,
