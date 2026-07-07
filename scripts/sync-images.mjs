@@ -47,6 +47,24 @@ const add = (iconName, iconUrl) => {
   if (u && u.startsWith(ORIGIN)) urls.add(u);
 };
 
+// Equipment icons whose name isn't in icon_paths: the app requests a deterministic
+// path (folder = icon prefix, e.g. icon_weapon_* -> weapon/), but upstream is
+// inconsistent — a few legacy icons (icon_weapon_Dagger_*) actually live under
+// item/. So mirror by PROBING candidate folders upstream and saving to the exact
+// local path the app will ask for. localRel -> [candidate upstream URLs].
+const equipTasks = new Map();
+const EQUIP_FOLDERS = ["item", "weapon", "equip", "shadowequip", "helmet"];
+const addEquip = (icon) => {
+  if (!icon) return;
+  if (iconPaths[icon]) { add(icon); return; }         // resolves via icon_paths
+  const m = icon.match(/^icon_([a-z]+)/);
+  const local = (m ? m[1] : "item") + "/" + icon + ".webp";
+  const rel = "media/images/" + local;
+  if (equipTasks.has(rel)) return;
+  const folders = [...new Set([(m ? m[1] : "item"), ...EQUIP_FOLDERS])];
+  equipTasks.set(rel, folders.map((f) => BASE_IMG + f + "/" + icon + ".webp"));
+};
+
 async function readJSON(rel) {
   try {
     return JSON.parse(await readFile(join(DATA, rel), "utf8"));
@@ -63,9 +81,7 @@ async function collect() {
     (cards?.cards || []).forEach((c) => add(c.item_icon));
 
     const equip = await readJSON(`equipment/data/equipment_${loc}.json`);
-    (equip?.items || []).forEach((it) =>
-      add(it.icon, it.icon ? "item/" + it.icon + ".webp" : undefined)
-    );
+    (equip?.items || []).forEach((it) => addEquip(it.icon));
 
     const pets = await readJSON(`pet/data/pet_library_${loc}.json`);
     (pets?.pets || []).forEach((p) => add(p.icon, p.iconUrl));
@@ -148,6 +164,25 @@ async function download(url) {
   }
 }
 
+// Try each candidate upstream URL; save the first that exists to the fixed local
+// path (rel). Lets the app use one deterministic path despite upstream drift.
+async function downloadEquip(rel) {
+  const dest = join(PUBLIC, rel);
+  if (await exists(dest)) { skipCount++; return; }
+  for (const url of equipTasks.get(rel)) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const buf = Buffer.from(await res.arrayBuffer());
+      await mkdir(dirname(dest), { recursive: true });
+      await writeFile(dest, buf);
+      okCount++;
+      return;
+    } catch { /* try next candidate */ }
+  }
+  failCount++;
+}
+
 async function pool(items, size, fn) {
   const queue = [...items];
   let done = 0;
@@ -173,6 +208,8 @@ async function main() {
   console.log("Unique images referenced: " + urls.size + "\n");
   console.log("Downloading -> public/media/images (skips 404 + already-cached)");
   await pool([...urls], 16, download);
+  console.log(`Equipment icons (probe candidate folders): ${equipTasks.size}`);
+  await pool([...equipTasks.keys()], 16, downloadEquip);
   console.log(`\nDone. ${okCount} downloaded, ${skipCount} cached, ${failCount} failed/missing.`);
 }
 

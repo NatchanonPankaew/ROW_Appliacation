@@ -280,6 +280,17 @@ function stripColorTags(s: any): string {
   return String(s || "").replace(/<color[^>]*>/gi, "").replace(/<\/color>/gi, "");
 }
 
+// Equipment icon -> /media/images/<folder>/<icon>.webp fallback (used when the
+// icon isn't in icon_paths, e.g. Taiwan-sourced gear). The media subfolder is
+// encoded in the icon name prefix: icon_weapon_* -> weapon/, icon_equip_* ->
+// equip/, icon_shadowequip_* -> shadowequip/, icon_helmet_* -> helmet/, else item/.
+function equipIconUrl(icon?: string): string | undefined {
+  if (!icon) return undefined;
+  const m = icon.match(/^icon_([a-z]+)/);
+  const folder = m ? m[1] : "item";
+  return folder + "/" + icon + ".webp";
+}
+
 function fmtNum(e: any): string {
   const t = Number(e);
   if (!Number.isFinite(t)) return String(e ?? "");
@@ -516,8 +527,8 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
         subtitle: slot || (it.openLevel ? "Lv." + it.openLevel : undefined),
         effects: [it.desc ? stripColorTags(it.desc) : "", ...resolveAbilities(it)].filter(Boolean),
         iconName: it.icon,
-        // equipment icons live under /media/images/item/<icon>.webp when not in icon_paths
-        iconUrl: it.icon ? "item/" + it.icon + ".webp" : undefined,
+        // fallback path when the icon isn't in icon_paths (Taiwan-sourced gear)
+        iconUrl: equipIconUrl(it.icon),
         quality: it.quality,
         details,
         stats: numeric,

@@ -30,6 +30,9 @@ function translateName(name, T) {
   return royal + slotTh + baseTh + roman;
 }
 
+const skel = (s) => { let i = 0; return s.replace(/[0-9]+(\.[0-9]+)?/g, () => "{" + (i++) + "}"); };
+const nums = (s) => s.match(/[0-9]+(\.[0-9]+)?/g) || [];
+
 export async function applyTwEquipTh() {
   const T = JSON.parse(await readFile(MAP, "utf8"));
   const lib = JSON.parse(await readFile(LIB, "utf8"));
@@ -44,9 +47,24 @@ export async function applyTwEquipTh() {
   for (const [code, th] of Object.entries(T.subtypes || {}))
     if (lib.itemSubtypes && lib.itemSubtypes[code]) lib.itemSubtypes[code].name = th;
 
+  // conditional bonus lines: match by number-skeleton, fill the entry's numbers.
+  let nc = 0; const unkCond = new Set();
+  for (const c of Object.values(lib.conditions || {})) {
+    const t = c.text || c.name; if (!t || !cjk.test(t)) continue;
+    const tmpl = (T.conditions || {})[skel(t)];
+    if (tmpl) { const nn = nums(t); const out = tmpl.replace(/\{(\d+)\}/g, (_, i) => nn[i]); c.text = out; c.name = out; nc++; }
+    else unkCond.add(skel(t));
+  }
+  // suit names
+  let ns = 0;
+  for (const s of (lib.suits || [])) {
+    if (s.name && (T.suits || {})[s.name]) { s.name = T.suits[s.name]; ns++; }
+  }
+
   await writeFile(LIB, JSON.stringify(lib));
-  console.log("  equip th: translated " + n + " item names");
-  if (unknown.size) console.log("  equip th: UNTRANSLATED (" + unknown.size + "):", [...unknown].slice(0, 8));
+  console.log("  equip th: translated " + n + " item names, " + nc + " conditions, " + ns + " suits");
+  if (unknown.size) console.log("  equip th: UNTRANSLATED names (" + unknown.size + "):", [...unknown].slice(0, 8));
+  if (unkCond.size) console.log("  equip th: UNTRANSLATED conditions (" + unkCond.size + "):", [...unkCond].slice(0, 4));
 }
 
 if (import.meta.url === ("file://" + process.argv[1])) applyTwEquipTh();
