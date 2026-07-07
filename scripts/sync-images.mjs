@@ -85,13 +85,30 @@ async function collect() {
     const jobs = idx?.jobs || idx || {};
     Object.values(jobs).forEach((j) => add(j?.job_icon));
 
+    // Equipment affixes (stunts): the stunt icons live in icon_paths, plus the
+    // weapon-type / equip-slot icons the affix browser & planner show.
+    const affixIdx = await readJSON(`affix-simulator/data/stunt_package_index_${loc}.json`);
+    Object.values(affixIdx?.weapon_types || {}).forEach((t) => add(t?.icon));
+    Object.values(affixIdx?.assembly_types || {}).forEach((t) => add(t?.icon));
+    const affixLib = await readJSON(`affix-simulator/data/stunt_skill_library_${loc}.json`);
+    Object.values(affixLib?.packages || {}).forEach((p) =>
+      (p?.entries || []).forEach((e) => {
+        const ic = (e?.stunt || e)?.icon;
+        add(ic, ic ? "item/" + ic + ".webp" : undefined); // Taiwan stunt icons aren't in icon_paths
+      })
+    );
+
     // per-job skill icons
     try {
       const dir = join(DATA, `skill-simulator/data/jobs_${loc}`);
       for (const f of await readdir(dir)) {
         const d = JSON.parse(await readFile(join(dir, f), "utf8"));
         const job = d.job || d;
-        Object.values(job.skills || {}).forEach((s) => add(s?.icon));
+        // pass the skill/<icon>.webp fallback too: Taiwan-sourced skills (Bard/
+        // Dancer/Alchemist) aren't in icon_paths, so resolve() would miss them.
+        Object.values(job.skills || {}).forEach((s) =>
+          add(s?.icon, s?.icon ? "skill/" + s.icon + ".webp" : undefined)
+        );
       }
     } catch {
       /* no jobs dir for this locale */

@@ -16,6 +16,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "character", label: "Character" },
   { key: "cards", label: "Cards" },
   { key: "equipment", label: "Equip" },
+  { key: "affix", label: "Affix" },
   { key: "skills", label: "Skills" },
   { key: "monsters", label: "Monster" },
   { key: "pets", label: "Pets" },

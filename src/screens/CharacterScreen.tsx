@@ -8,6 +8,8 @@ import {
   NormItem, IconPaths,
   fetchSkillIndex, fetchJobSkills, skillPathTo, jobPathHasSkills, skillUnlockLimit,
   JobNode, SkillNode, SKILL_TIER_POOLS,
+  fetchAffixData, affixSlotForItem, affixOptionsForItem,
+  AffixData, AffixStunt, AffixOption,
 } from "../api/roworlddb";
 
 const LOCALES = ["en-US", "th-TH", "zh-TW"];
@@ -35,6 +37,18 @@ const SLOTS: SlotDef[] = [
   { key: "accessory1", labels: { "th-TH": "เครื่องประดับ 1", "en-US": "Accessory 1", "zh-TW": "飾品1" }, aliases: ["飾品", "เครื่องประดับ", "accessory"] },
   { key: "accessory2", labels: { "th-TH": "เครื่องประดับ 2", "en-US": "Accessory 2", "zh-TW": "飾品2" }, aliases: [] },
 ];
+// Advancement classes the equipment dataset doesn't gear directly (Paladin/223,
+// Champion/523) borrow the gear pool of their same-line 3rd job (Royal Guard/224,
+// Sura/524) for the equipment filter, so they aren't left with almost no items.
+// Classes with no gear of their own borrow a same-line class's pool for the
+// equipment filter: Paladin→RG, Champion→Sura, Dancer/Gypsy/Clown→Bard, Creator→Alchemist.
+const GEAR_ALIAS: Record<number, number> = { 223: 224, 523: 524, 432: 422, 433: 422, 423: 422, 723: 722 };
+
+// Classes hidden from the picker because an advancement class stands in for them:
+// the Swordsman line is shown as Paladin(223), so Royal Guard(224) is dropped
+// (Paladin still borrows its gear pool via GEAR_ALIAS).
+const HIDDEN_JOBS = new Set<number>([224]);
+
 // slot keys that share the accessory item/card pool
 const ACCESSORY_KEYS = ["accessory1", "accessory2"];
 const poolKeyOf = (k: string) => (ACCESSORY_KEYS.includes(k) ? "accessory" : k);
@@ -48,7 +62,7 @@ function itemSlotKey(it: NormItem): string {
 }
 
 /* ---- build model ---- */
-type Slot = { item?: NormItem; refine: number; cards: NormItem[] };
+type Slot = { item?: NormItem; refine: number; cards: NormItem[]; affixes?: AffixStunt[] };
 type Build = {
   level: number;
   job: NormItem | null;
@@ -95,6 +109,7 @@ function computeStats(b: Build): Record<string, number> {
       add(sl.item.refineStats, sl.refine);      // +N refine bonus
     }
     sl.cards.forEach((c) => add(c.stats));
+    sl.affixes?.forEach((a) => add(a.stats));     // forged equipment affixes
   });
   for (const k of Object.keys(total)) {
     total[k] = Math.round(total[k] * 100) / 100;
@@ -256,7 +271,7 @@ const PRESETS: Preset[] = [
   },
   {
     role: "ระยะไกล / Ranged",
-    match: ["hunter", "ฮันเตอร์", "sniper", "สไนเปอร์", "ranger", "เรนเจอร์", "archer", "อาเชอร์", "minstrel", "wanderer", "gunslinger", "ปืน", "rebellion"],
+    match: ["hunter", "ฮันเตอร์", "sniper", "สไนเปอร์", "ranger", "เรนเจอร์", "archer", "อาเชอร์", "bard", "บาร์ด", "dancer", "แดนเซอร์", "clown", "gypsy", "minstrel", "wanderer", "gunslinger", "ปืน", "rebellion"],
     statOrder: ["AGI", "DEX", "LUK", "INT", "VIT"],
     targets: { AGI: 120, DEX: 110, LUK: 60 },
     skills: [
@@ -270,7 +285,7 @@ const PRESETS: Preset[] = [
   },
   {
     role: "สายเวท / Caster",
-    match: ["mage", "เมจ", "wizard", "วิซ", "warlock", "วอร์ล็อก", "sage", "เซจ", "professor", "sorcerer", "ซอเซอเรอร์"],
+    match: ["mage", "เมจ", "wizard", "วิซ", "warlock", "วอร์ล็อก", "sage", "เซจ", "professor", "sorcerer", "ซอเซอเรอร์", "alchemist", "อัลเคมิสต์", "อเคมิส", "creator", "genetic"],
     statOrder: ["INT", "DEX", "VIT", "LUK", "AGI"],
     targets: { INT: 120, DEX: 90, VIT: 60 },
     skills: [
@@ -463,14 +478,17 @@ const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
   {
     match: ["monk", "มังค์", "sura", "ซูระ", "champion"],
     variants: [
+      // keywords match the REAL Champion/Sura skill names (Raging Palm Strike,
+      // Glacier Fist, Chain Crush Combo, Explosive Fist/หมัดระเบิดพลัง, Throw Spirit
+      // Sphere/ดีดจิต...) so the auto-plan focuses them instead of spreading points.
       { name: "อสุระ (Asura)", statOrder: ["STR", "INT", "DEX", "VIT"], targets: { STR: 110, INT: 90, DEX: 80 },
-        skillBoost: ["asura", "spirit", "fury", "อสุระ", "ตะวัน"],
-        skills: ["แม็กซ์ Asura Strike (Guillotine Fist)", "Spirit Spheres + Fury / Critical Explosion", "Blade Stop / Snap เข้าหา"],
+        skillBoost: ["asura", "อสุระ", "raging palm", "palm strike", "explosive", "หมัดระเบิด", "ดีดจิต", "spirit sphere", "spirit", "zen", "fury", "ตะวัน"],
+        skills: ["แม็กซ์ Raging Palm Strike / Explosive Fist (หมัดระเบิดพลัง)", "ดีดจิตไร้ขีดจำกัด + Zen เก็บ Spirit Sphere", "Cursed Circle คุมศัตรู"],
         gear: ["เพิ่ม STR/INT + Max SP (สเกล Asura)", "ดาเมจ/เจาะ DEF", "ลดคูลดาวน์"],
         cards: ["การ์ด STR/INT", "ดาเมจต่อเผ่า/บอส", "SP / ลดดาเมจ"] },
       { name: "คอมโบ (Combo)", statOrder: ["STR", "AGI", "DEX", "VIT"], targets: { STR: 110, AGI: 90, DEX: 80 },
-        skillBoost: ["combo", "fist", "investigate", "chain", "หมัด", "คอมโบ"],
-        skills: ["Triple Attack → Chain Combo → Combo Finish", "Investigate / Occult เจาะ DEF", "Spirit Spheres + Fury"],
+        skillBoost: ["combo", "คอมโบ", "chain crush", "chain", "glacier", "raging palm", "fist", "หมัด", "investigate", "triple"],
+        skills: ["Chain Crush Combo → Raging Palm Strike", "Glacier Fist เก็บคอมโบ", "Zen + จิตนักสู้ Sura เสริม"],
         gear: ["เพิ่ม STR/AGI + ASPD", "เจาะ DEF", "ดาเมจหมัด/ต่อเผ่า"],
         cards: ["การ์ด STR/AGI", "ASPD / เจาะ DEF", "ดาเมจต่อเผ่า"] },
     ],
@@ -641,6 +659,98 @@ function ClassModal({ jobs, iconPaths, onPick, onClose }: {
             ListEmptyComponent={<Text style={styles.empty}>ไม่พบอาชีพ</Text>}
           />
           <TouchableOpacity style={styles.closeBtn} onPress={onClose}><Text style={styles.closeText}>ปิด</Text></TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+/* ---- equipment affix planner (per equipped item) ----
+ * Lists the forge affixes the item can take (by weapon/armor type + level),
+ * filtered to the build's class. Tapping a level toggles that affix; flat stat
+ * bonuses parsed from its text are summed into the build. */
+function AffixSheet({ item, jobPath, data, iconPaths, selected, onToggle, onClear, onClose }: {
+  item: NormItem; jobPath: number[]; data: AffixData; iconPaths: IconPaths | null;
+  selected: AffixStunt[]; onToggle: (s: AffixStunt) => void; onClear: () => void; onClose: () => void;
+}) {
+  const [q, setQ] = useState("");
+  const options: AffixOption[] = useMemo(
+    () => affixOptionsForItem(data, item, jobPath),
+    [data, item, jobPath]
+  );
+  const norm = (s: string) => s.toLowerCase().replace(/[็-๎]/g, "");
+  const data2 = useMemo(() => {
+    const toks = norm(q.trim()).split(/\s+/).filter(Boolean);
+    if (!toks.length) return options;
+    return options.filter((o) => {
+      const t = norm(o.name + " " + o.entries.map((e) => e.desc).join(" "));
+      return toks.every((tok) => t.includes(tok));
+    });
+  }, [q, options]);
+  const selIds = new Set(selected.map((a) => a.id));
+  const affixIcon = (icon?: string) =>
+    resolveIconUrl({ iconName: icon, iconUrl: icon ? "item/" + icon + ".webp" : undefined } as any, iconPaths);
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalBg}>
+        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
+        <View style={styles.modalCard}>
+          <View style={styles.modalHandle} />
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <Text style={styles.modalTitle} numberOfLines={1}>ออปชั่นอุปกรณ์ · {item.title}</Text>
+            {selected.length > 0 && (
+              <TouchableOpacity onPress={onClear}><Text style={styles.affixClear}>ล้าง ({selected.length})</Text></TouchableOpacity>
+            )}
+          </View>
+          <Text style={styles.affixSub}>เลือกออปชั่นได้ตามคลาส/ชนิด/เลเวลของชิ้นนี้ · มี {options.length} ออปชั่น</Text>
+          <TextInput style={styles.search} placeholder="ค้นหาออปชั่น เช่น ATK ต้านทานไฟ" placeholderTextColor="#6B7079"
+            value={q} onChangeText={setQ} />
+          <FlatList
+            data={data2} keyExtractor={(o) => o.packageId} keyboardShouldPersistTaps="handled"
+            style={{ marginTop: 8 }} initialNumToRender={14}
+            ListEmptyComponent={<Text style={styles.empty}>ไม่มีออปชั่นสำหรับชิ้น/คลาสนี้</Text>}
+            renderItem={({ item: o }) => {
+              const qi = qualityInfo(o.quality);
+              const url = affixIcon(o.icon);
+              const picked = o.entries.find((e) => selIds.has(e.id));
+              const shown = picked || o.entries[o.entries.length - 1];
+              return (
+                <View style={[styles.affixRow, picked && qi && { borderColor: qi.color }]}>
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <View style={styles.iconBox}>
+                      {url ? <Image source={{ uri: url }} style={styles.icon28} resizeMode="contain" />
+                        : <View style={[styles.icon28, styles.iconFallback]} />}
+                    </View>
+                    <Text style={[styles.affixName, qi && { color: qi.color }]} numberOfLines={1}>{o.name}</Text>
+                  </View>
+                  {o.entries.length > 1 && (
+                    <View style={styles.affixLevels}>
+                      {o.entries.map((e) => {
+                        const on = selIds.has(e.id);
+                        return (
+                          <TouchableOpacity key={e.id} onPress={() => onToggle(e)}
+                            style={[styles.affixLvBtn, on && styles.affixLvBtnOn]}>
+                            <Text style={[styles.affixLvText, on && { color: "#0E0F12" }]}>Lv{e.level}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
+                  {o.entries.length === 1 && (
+                    <TouchableOpacity onPress={() => onToggle(o.entries[0])}
+                      style={[styles.affixLvBtn, selIds.has(o.entries[0].id) && styles.affixLvBtnOn, { alignSelf: "flex-start", marginTop: 6 }]}>
+                      <Text style={[styles.affixLvText, selIds.has(o.entries[0].id) && { color: "#0E0F12" }]}>
+                        {selIds.has(o.entries[0].id) ? "✓ เลือก" : "เลือก"}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  {!!shown?.desc && <Text style={styles.affixDesc} numberOfLines={3}>{shown.desc}</Text>}
+                </View>
+              );
+            }}
+          />
+          <TouchableOpacity style={styles.closeBtn} onPress={onClose}><Text style={styles.closeText}>เสร็จ</Text></TouchableOpacity>
         </View>
       </View>
     </Modal>
@@ -933,12 +1043,36 @@ function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, avoidK
   const skillIcon = (icon?: string) =>
     resolveIconUrl({ iconName: icon, iconUrl: icon ? "skill/" + icon + ".webp" : undefined } as any, iconPaths);
   const selNode = sel ? nodeOf(sel) : null;
-  const selDes = (() => {
-    if (!selNode || !selNode.levels) return "";
-    const lvl = pts[selNode.kindId] || 1;
-    const lv = selNode.levels[lvl] || selNode.levels[String(lvl)] || selNode.levels[1] || selNode.levels["1"];
-    const d = lv && (lv.des || lv.skilldes);
-    return d ? String(d).replace(/<color=#?[0-9a-fA-F]+>/g, "").replace(/<\/color>/g, "").replace(/\n/g, " ") : "";
+  // Everything the in-game-style skill popup needs, resolved for the CURRENT
+  // allocated level (or the natural max when the skill isn't allocated yet).
+  const selInfo = (() => {
+    if (!selNode) return null;
+    const lvlCur = pts[selNode.kindId] || 0;
+    const lvlShow = lvlCur || selNode.naturalMax || 1;
+    const L = selNode.levels
+      ? (selNode.levels[lvlShow] || selNode.levels[String(lvlShow)] ||
+         selNode.levels[selNode.naturalMax] || selNode.levels[1] || selNode.levels["1"])
+      : null;
+    const clean = (s: any) => String(s ?? "").replace(/<color=#?[0-9a-fA-F]+>/g, "").replace(/<\/color>/g, "").replace(/\n/g, " ").trim();
+    const tags: string[] = Array.isArray(L?.skill_tags) ? L.skill_tags.map((t: any) => clean(t?.name)).filter(Boolean) : [];
+    const cd = Number(L?.cooldown) || 0, fix = Number(L?.chant_fixed) || 0, varc = Number(L?.chant_float) || 0;
+    const sp = Number(L?.mana_cost) || 0, rng = Number(L?.range_max) || 0;
+    const meta: string[] = [];
+    if (sp) meta.push("SP " + sp);
+    if (!selNode.passive) {
+      if (fix) meta.push("ร่ายคงที่ " + (fix / 1000).toFixed(1) + "s");
+      if (varc) meta.push("ร่ายแปรผัน " + (varc / 1000).toFixed(1) + "s");
+      if (!fix && !varc) meta.push("ร่ายทันที");
+    }
+    if (cd) meta.push("คูลดาวน์ " + (cd / 1000).toFixed(cd % 1000 ? 1 : 0) + "s");
+    if (rng) meta.push("ระยะ " + rng);
+    const owner = ownerOf(selNode.kindId);
+    return {
+      lvlCur, tags, meta,
+      des: clean(L && (L.des || L.skilldes)),
+      dmg: skillDamage(selNode, lvlCur, patk || 0, matk || 0),
+      addOk: owner != null && canAdd(selNode, owner),
+    };
   })();
 
   const targetJobs = useMemo(() => {
@@ -1012,39 +1146,6 @@ function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, avoidK
                   </View>
                 );
               })}
-              {!!selDes && (
-                <View style={styles.skDetail}>
-                  <Text style={styles.skDetailName}>{selNode?.name}</Text>
-                  {(() => {
-                    if (!selNode) return null;
-                    const dmg = skillDamage(selNode, pts[selNode.kindId] || 0, patk || 0, matk || 0);
-                    if (!dmg) return null;
-                    return (
-                      <View style={styles.skDpsRow}>
-                        <Text style={styles.skDpsMain}>≈ {dmg.hit.toLocaleString()} /ครั้ง</Text>
-                        <Text style={styles.skDpsSub}>DPS ≈ {dmg.dps.toLocaleString()} · {dmg.magic ? "เวท (MATK)" : "กาย (P.ATK)"} · รอบ {(dmg.cycle / 1000).toFixed(1)}s</Text>
-                      </View>
-                    );
-                  })()}
-                  {(() => {
-                    if (!selNode || !selNode.levels) return null;
-                    const lvl = pts[selNode.kindId] || selNode.naturalMax || 1;
-                    const L = selNode.levels[lvl] || selNode.levels[String(lvl)] ||
-                      selNode.levels[selNode.naturalMax] || selNode.levels[1] || selNode.levels["1"];
-                    if (!L) return null;
-                    const cd = Number(L.cooldown) || 0, fix = Number(L.chant_fixed) || 0;
-                    const varc = Number(L.chant_float) || 0, sp = Number(L.mana_cost) || 0;
-                    const parts: string[] = [];
-                    if (cd) parts.push("คูลดาวน์ " + (cd / 1000).toFixed(cd % 1000 ? 1 : 0) + "s");
-                    if (fix) parts.push("ร่ายคงที่ " + (fix / 1000).toFixed(1) + "s");
-                    if (varc) parts.push("ร่ายแปรผัน " + (varc / 1000).toFixed(1) + "s");
-                    if (!selNode.passive && !fix && !varc) parts.push("ร่ายทันที");
-                    if (sp) parts.push("SP " + sp);
-                    return parts.length ? <Text style={styles.skMeta}>{parts.join("  ·  ")}</Text> : null;
-                  })()}
-                  <Text style={styles.skDetailDes}>{selDes}</Text>
-                </View>
-              )}
             </ScrollView>
           )}
 
@@ -1054,6 +1155,60 @@ function SkillPlanner({ locale, iconPaths, initialJobName, boostKeywords, avoidK
             </TouchableOpacity>
             <TouchableOpacity style={[styles.closeBtn, { flex: 1, marginLeft: 6 }]} onPress={onClose}><Text style={styles.closeText}>ปิด</Text></TouchableOpacity>
           </View>
+
+          {/* in-game-style skill tooltip — pops up when a skill is tapped */}
+          {selNode && selInfo && (
+            <Modal visible transparent animationType="fade" onRequestClose={() => setSel(null)}>
+              <View style={styles.skPopBg}>
+                <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setSel(null)} />
+                <View style={styles.skPopCard}>
+                  <View style={styles.skPopHead}>
+                    <View style={styles.skPopIconBox}>
+                      {skillIcon(selNode.icon)
+                        ? <Image source={{ uri: skillIcon(selNode.icon)! }} style={styles.skPopIcon} resizeMode="contain" />
+                        : <View style={[styles.skPopIcon, styles.iconFallback]} />}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.skPopName}>{selNode.name}</Text>
+                      <Text style={styles.skPopLevel}>
+                        เลเวล {selInfo.lvlCur}/{selNode.naturalMax}{selNode.passive ? "  ·  พาสซีฟ" : "  ·  ออกฤทธิ์"}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {selInfo.tags.length > 0 && (
+                    <View style={styles.skTagRow}>
+                      {selInfo.tags.map((t, i) => (
+                        <View key={i} style={styles.skTag}><Text style={styles.skTagText}>{t}</Text></View>
+                      ))}
+                    </View>
+                  )}
+
+                  {selInfo.meta.length > 0 && <Text style={styles.skMeta}>{selInfo.meta.join("  ·  ")}</Text>}
+                  {!!selInfo.des && <Text style={styles.skDetailDes}>{selInfo.des}</Text>}
+
+                  <View style={styles.skPopCtrl}>
+                    <TouchableOpacity disabled={selInfo.lvlCur <= 0} onPress={() => remove(selNode.kindId)}
+                      style={[styles.skPopStep, selInfo.lvlCur <= 0 && styles.stepDisabled]}>
+                      <Text style={styles.skPopStepText}>−</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity disabled={!selInfo.addOk} onPress={() => add(selNode.kindId)}
+                      style={[styles.skPopStep, styles.skPopStepAdd, !selInfo.addOk && styles.stepDisabled]}>
+                      <Text style={[styles.skPopStepText, { color: "#0E0F12" }]}>＋</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity disabled={!selInfo.addOk} onPress={() => addMax(selNode.kindId)}
+                      style={[styles.skPopStep, styles.skPopStepWide, !selInfo.addOk && styles.stepDisabled]}>
+                      <Text style={styles.skPopStepText}>สูงสุด</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <TouchableOpacity style={styles.skPopClose} onPress={() => setSel(null)}>
+                    <Text style={styles.closeText}>ปิด</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </Modal>
+          )}
 
           {jobPick && index && (
             <Modal visible transparent animationType="fade" onRequestClose={() => setJobPick(false)}>
@@ -1091,31 +1246,46 @@ export default function CharacterScreen() {
   const [jobs, setJobs] = useState<NormItem[]>([]);
   const [skillMeta, setSkillMeta] = useState<Record<string, { points: number; path: string }>>({});
   const [iconPaths, setIconPaths] = useState<IconPaths | null>(null);
+  const [affixData, setAffixData] = useState<AffixData | null>(null);
+  const [skillIdx, setSkillIdx] = useState<Record<number, JobNode>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [build, setBuild] = useState<Build>(emptyBuild);
   const [saved, setSaved] = useState<Build | null>(null);
   const [picker, setPicker] = useState<{ kind: string; slot?: string } | null>(null);
+  const [affixSlot, setAffixSlot] = useState<string | null>(null);   // slot key whose affix sheet is open
 
   const load = useCallback(async (loc: string) => {
     setLoading(true); setError(null);
     try {
-      const [eq, cd, sk, icons] = await Promise.all([
+      const [eq, cd, sk, icons, skIdx, affix] = await Promise.all([
         fetchData("equipment", loc),
         fetchData("cards", loc),
         fetchData("skills", loc).catch(() => ({ items: [] as NormItem[] })),
         fetchIconPaths().catch(() => null),
+        fetchSkillIndex(loc).catch(() => ({} as Record<number, JobNode>)),
+        fetchAffixData(loc).catch(() => null),
       ]);
-      setEquipment(eq.items); setCards(cd.items); setIconPaths(icons);
+      setEquipment(eq.items); setCards(cd.items); setIconPaths(icons); setAffixData(affix); setSkillIdx(skIdx);
       // prefer the job list from the equipment dataset (ids line up with jobLimits);
       // fall back to skills jobs if it's missing
       const eqJobs = (eq as any).jobs as { id: number; name: string; icon?: string }[] | undefined;
-      setJobs(
-        eqJobs && eqJobs.length
-          ? eqJobs.map((j) => ({ id: j.id, title: j.name, iconName: j.icon } as NormItem))
-          : sk.items
-      );
+      const jobList: NormItem[] = eqJobs && eqJobs.length
+        ? eqJobs.map((j) => ({ id: j.id, title: j.name, iconName: j.icon } as NormItem))
+        : [...sk.items];
+      // Merge in advancement classes that exist in the (healed) skill index but
+      // are absent from the equipment job list — e.g. Paladin/223, Champion/523 —
+      // so they can be selected, geared and skill-planned from here too.
+      const haveIds = new Set(jobList.map((j) => Number(j.id)));
+      Object.values(skIdx).forEach((j) => {
+        if (j.id !== 101 && jobPathHasSkills(skIdx, j.id) && !haveIds.has(j.id)) {
+          jobList.push({ id: j.id, title: j.name, iconName: j.icon } as NormItem);
+        }
+      });
+      const visibleJobs = jobList.filter((j) => !HIDDEN_JOBS.has(Number(j.id)));
+      visibleJobs.sort((a, b) => Number(a.id) - Number(b.id)); // by id ≈ job progression
+      setJobs(visibleJobs);
       // skill index metadata (evolution path + skill-point budget), keyed by job name
       const meta: Record<string, { points: number; path: string }> = {};
       (sk.items || []).forEach((j: NormItem) => {
@@ -1200,6 +1370,20 @@ export default function CharacterScreen() {
     });
   const removeCard = (k: string, i: number) =>
     setBuild((b) => { const cur = b.slots[k]; if (!cur) return b; return { ...b, slots: { ...b.slots, [k]: { ...cur, cards: cur.cards.filter((_, x) => x !== i) } } }; });
+  // Toggle a forged affix on a slot. Picking another level of the same affix
+  // family (same name) replaces it rather than stacking duplicates.
+  const toggleAffix = (k: string, stunt: AffixStunt) =>
+    setBuild((b) => {
+      const cur = b.slots[k] || { refine: 0, cards: [] };
+      const list = cur.affixes || [];
+      const exact = list.find((a) => a.id === stunt.id);
+      const next = exact
+        ? list.filter((a) => a.id !== stunt.id)                       // tap selected level -> remove
+        : [...list.filter((a) => a.name !== stunt.name), stunt];      // swap family to this level
+      return { ...b, slots: { ...b.slots, [k]: { ...cur, affixes: next } } };
+    });
+  const clearAffixes = (k: string) =>
+    setBuild((b) => { const cur = b.slots[k]; if (!cur) return b; return { ...b, slots: { ...b.slots, [k]: { ...cur, affixes: [] } } }; });
   const setLevel = (lv: number) => setBuild((b) => ({ ...b, level: Math.max(1, Math.min(MAX_LEVEL, lv)) }));
   const addStat = (k: string, dir: number) =>
     setBuild((b) => {
@@ -1232,7 +1416,8 @@ export default function CharacterScreen() {
       m = [...m, ...oneHandWeapons];
     }
     if (m.length === 0) m = equipment;            // fallback if slot mapping missed
-    const jid = build.job ? Number(build.job.id) : null;
+    const jid0 = build.job ? Number(build.job.id) : null;
+    const jid = jid0 != null ? (GEAR_ALIAS[jid0] ?? jid0) : null;
     if (jid != null) {
       const hasJobInfo = m.some((it) => it.jobAll || (it.jobLimits && it.jobLimits.length));
       if (hasJobInfo) m = m.filter((it) => it.jobAll || (it.jobLimits || []).includes(jid));
@@ -1286,11 +1471,20 @@ export default function CharacterScreen() {
           )}
         </TouchableOpacity>
         {it ? (
-          <View style={styles.refineRow}>
-            <TouchableOpacity style={styles.rfBtnSm} onPress={() => setRefine(s.key, -1)}><Text style={styles.rfBtnText}>−</Text></TouchableOpacity>
-            <Text style={styles.refineRowText}>+{sl.refine}</Text>
-            <TouchableOpacity style={styles.rfBtnSm} onPress={() => setRefine(s.key, 1)}><Text style={styles.rfBtnText}>+</Text></TouchableOpacity>
-          </View>
+          <>
+            <View style={styles.refineRow}>
+              <TouchableOpacity style={styles.rfBtnSm} onPress={() => setRefine(s.key, -1)}><Text style={styles.rfBtnText}>−</Text></TouchableOpacity>
+              <Text style={styles.refineRowText}>+{sl.refine}</Text>
+              <TouchableOpacity style={styles.rfBtnSm} onPress={() => setRefine(s.key, 1)}><Text style={styles.rfBtnText}>+</Text></TouchableOpacity>
+            </View>
+            {affixData && affixSlotForItem(it) && (
+              <TouchableOpacity style={styles.affixBtn} onPress={() => setAffixSlot(s.key)}>
+                <Text style={styles.affixBtnText} numberOfLines={1}>
+                  ✦ ออปชั่น{sl.affixes && sl.affixes.length ? " (" + sl.affixes.length + ")" : ""}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </>
         ) : <Text style={styles.slotNameEmpty} numberOfLines={1}>{locked ? "ล็อก" : "ว่าง"}</Text>}
       </View>
     );
@@ -1581,6 +1775,18 @@ export default function CharacterScreen() {
           boostKeywords={activeVariant?.skillBoost} avoidKeywords={avoidKeywords} autoApply
           patk={Math.max(combat.patkM, combat.patkR)} matk={combat.matk} onClose={() => setPicker(null)} />
       )}
+      {affixSlot && affixData && getSlot(affixSlot).item && (
+        <AffixSheet
+          item={getSlot(affixSlot).item!}
+          jobPath={build.job ? skillPathTo(skillIdx, Number(build.job.id)).slice().reverse() : []}
+          data={affixData}
+          iconPaths={iconPaths}
+          selected={getSlot(affixSlot).affixes || []}
+          onToggle={(stunt) => toggleAffix(affixSlot, stunt)}
+          onClear={() => clearAffixes(affixSlot)}
+          onClose={() => setAffixSlot(null)}
+        />
+      )}
     </View>
   );
 }
@@ -1660,6 +1866,24 @@ const styles = StyleSheet.create({
   skDetailName: { color: "#5566C7", fontSize: 13, fontWeight: "bold", marginBottom: 4 },
   skDetailDes: { color: "#5A6781", fontSize: 12, lineHeight: 18 },
 
+  // in-game-style skill tooltip popup
+  skPopBg: { flex: 1, backgroundColor: "rgba(40,60,100,0.45)", alignItems: "center", justifyContent: "center", paddingHorizontal: 24 },
+  skPopCard: { width: "100%", maxWidth: 380, backgroundColor: "#F4F8FE", borderRadius: 16, padding: 16, borderWidth: 1, borderColor: "#DCE6F4" },
+  skPopHead: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
+  skPopIconBox: { width: 48, height: 48, borderRadius: 10, backgroundColor: "#EAF1FB", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#DCE6F4", marginRight: 10 },
+  skPopIcon: { width: 36, height: 36 },
+  skPopName: { color: "#41506B", fontSize: 16, fontWeight: "bold", lineHeight: 22 },
+  skPopLevel: { color: "#8A97AD", fontSize: 12, fontWeight: "700", marginTop: 1 },
+  skTagRow: { flexDirection: "row", flexWrap: "wrap", marginBottom: 6 },
+  skTag: { backgroundColor: "#EAF0FF", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, marginRight: 4, marginBottom: 4, borderWidth: 1, borderColor: "#D7E0F6" },
+  skTagText: { color: "#5566C7", fontSize: 10, fontWeight: "700" },
+  skPopCtrl: { flexDirection: "row", marginTop: 12, marginBottom: 4 },
+  skPopStep: { width: 40, height: 36, borderRadius: 9, backgroundColor: "#EAF1FB", alignItems: "center", justifyContent: "center", marginRight: 8, borderWidth: 1, borderColor: "#DCE6F4" },
+  skPopStepWide: { width: undefined, flex: 1, marginRight: 0 },
+  skPopStepAdd: { backgroundColor: "#6E83E8", borderColor: "#6E83E8" },
+  skPopStepText: { color: "#5A6781", fontSize: 15, fontWeight: "bold" },
+  skPopClose: { marginTop: 10, backgroundColor: "#6E83E8", borderRadius: 10, paddingVertical: 11, alignItems: "center" },
+
   equipRow: { flexDirection: "row", alignItems: "center", backgroundColor: "#16181D", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 7 },
   equipSlot: { color: "#6B7079", fontSize: 11, fontWeight: "bold", width: 70 },
   equipMain: { flex: 1, flexDirection: "row", alignItems: "center" },
@@ -1706,6 +1930,19 @@ const styles = StyleSheet.create({
   refineRow: { flexDirection: "row", alignItems: "center", marginTop: 2 },
   rfBtnSm: { width: 18, height: 18, borderRadius: 9, backgroundColor: "#EAF1FB", alignItems: "center", justifyContent: "center" },
   refineRowText: { color: "#5566C7", fontSize: 10, fontWeight: "bold", minWidth: 20, textAlign: "center" },
+
+  // affix (equipment option) button under a slot + the picker sheet
+  affixBtn: { marginTop: 4, backgroundColor: "#EAF0FF", borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3, borderWidth: 1, borderColor: "#D7E0F6", maxWidth: 78 },
+  affixBtnText: { color: "#5566C7", fontSize: 9, fontWeight: "bold", textAlign: "center" },
+  affixSub: { color: "#8A97AD", fontSize: 12, marginTop: 2, marginBottom: 2 },
+  affixClear: { color: "#E0564E", fontSize: 12, fontWeight: "bold" },
+  affixRow: { backgroundColor: "#FFFFFF", borderRadius: 10, padding: 10, marginBottom: 7, borderWidth: 1, borderColor: "#DCE6F4" },
+  affixName: { color: "#41506B", fontSize: 14, fontWeight: "bold", flex: 1, marginLeft: 2 },
+  affixLevels: { flexDirection: "row", flexWrap: "wrap", marginTop: 7 },
+  affixLvBtn: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8, backgroundColor: "#EAF1FB", borderWidth: 1, borderColor: "#DCE6F4", marginRight: 5, marginBottom: 5 },
+  affixLvBtnOn: { backgroundColor: "#E8B339", borderColor: "#E8B339" },
+  affixLvText: { color: "#5A6781", fontSize: 11, fontWeight: "bold" },
+  affixDesc: { color: "#5A6781", fontSize: 12, lineHeight: 18, marginTop: 6 },
 
   // two-pane desktop layout (character | stats)
   twoPane: { flexDirection: "row", alignItems: "flex-start" },

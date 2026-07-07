@@ -126,6 +126,34 @@ function DetailModal({ item, iconUrl, locale, jobNames, onClose }: {
                 ))}
               </View>
             )}
+            {(item.conditions || []).length > 0 && (
+              <View style={styles.detailTable}>
+                <Text style={styles.refineHead}>{L("โบนัสตามเลเวลเสริมพลัง", "Refine bonuses")}</Text>
+                {(item.conditions || []).map((line, i) => (
+                  <Text key={i} style={styles.condLine}>{line}</Text>
+                ))}
+              </View>
+            )}
+            {(item.sets || []).map((set, si) => (
+              <View key={si} style={styles.detailTable}>
+                <Text style={styles.refineHead}>
+                  {L("ชุดเซ็ต", "Set")}{set.name ? ` — ${set.name}` : ""}
+                </Text>
+                {set.components.length > 0 && (
+                  <Text style={styles.setComponents}>
+                    {L("ชิ้นส่วน", "Pieces")}: {set.components.join(", ")}
+                  </Text>
+                )}
+                {set.effects.map((e, i) => (
+                  <View key={i} style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>
+                      {e.count > 0 ? L(`${e.count} ชิ้น`, `${e.count} pcs`) : ""}
+                    </Text>
+                    <Text style={styles.detailValue}>{e.desc}</Text>
+                  </View>
+                ))}
+              </View>
+            ))}
             {item.story ? <Text style={styles.story}>{item.story}</Text> : null}
           </ScrollView>
           <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
@@ -495,6 +523,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#E6EDF7" },
   detailLabel: { color: "#8A97AD", fontSize: 13, flex: 1 },
   detailValue: { color: "#41506B", fontSize: 13, fontWeight: "bold", textAlign: "right", flex: 1 },
+  condLine: { color: "#5A6B8C", fontSize: 13, paddingVertical: 5,
+    borderBottomWidth: 1, borderBottomColor: "#E6EDF7", lineHeight: 19 },
+  setComponents: { color: "#8A97AD", fontSize: 12, paddingVertical: 6, lineHeight: 18 },
   story: { color: "#8A97AD", fontSize: 13, fontStyle: "italic", marginTop: 16, lineHeight: 20 },
   closeBtn: { marginTop: 16, backgroundColor: "#6E83E8", borderRadius: 10,
     paddingVertical: 12, alignItems: "center" },

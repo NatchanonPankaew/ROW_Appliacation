@@ -16,7 +16,8 @@ export type Kind =
   | "shop"
   | "maps"
   | "apocalypse"
-  | "runes";
+  | "runes"
+  | "affix";
 
 export interface DetailRow { label: string; value: string; }
 export interface FilterDef { key: string; label: string; options: string[]; }
@@ -46,8 +47,20 @@ export interface NormItem {
   jobLimits?: number[];      // job ids that can use this item ([] when jobAll)
   jobAll?: boolean;          // usable by every job
   subtypeName?: string;      // weapon/armor subtype label (e.g. "ดาบสองมือ")
+  subtypeCode?: number;      // raw itemSubtype code (weapon types line up with affix weapon_types 7001+)
   twoHanded?: boolean;       // weapon occupies the off-hand slot too
   reqLevel?: number;         // level required to equip (from openLevel)
+  // conditional bonuses (mostly refine-threshold lines, e.g. "+10 Max HP +3%")
+  conditions?: string[];
+  // set/suit effects this item belongs to
+  sets?: EquipSet[];
+}
+
+// A gear set: which pieces make it up and what each piece-count threshold grants.
+export interface EquipSet {
+  name: string;
+  components: string[];                       // localized component item names
+  effects: { count: number; desc: string }[]; // e.g. { count: 3, desc: "HP +200" }
 }
 
 export interface JobOpt { id: number; name: string; icon?: string; }
@@ -125,7 +138,7 @@ export const LOCALES = ["en-US", "th-TH", "zh-TW"];
 
 export const KIND_HAS_QUALITY: Record<Kind, boolean> = {
   character: false,
-  cards: true, equipment: true, pets: true, shop: true, runes: true,
+  cards: true, equipment: true, pets: true, shop: true, runes: true, affix: true,
   monsters: false, skills: false, maps: false, apocalypse: false,
 };
 
@@ -439,6 +452,52 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
     const attrs = d.attributes || {};
     const types = d.itemTypes || {};
     const subs = d.itemSubtypes || {};
+    // in-file libraries that the item references by id — these hold the gear's
+    // actual "abilities": stunts (special skills), buffs (passives), fixedAffixes
+    // (fixed bonus lines). Resolve them so the detail view shows them.
+    const buffLib = d.buffs || {}, stuntLib = d.stunts || {}, affixLib = d.affixes || {};
+    const condLib = d.conditions || {};
+    // suits is an array; items reference a suit by its id (also listed in .ids),
+    // not by array index — build an id -> suit lookup.
+    const suitById = new Map<number, any>();
+    for (const s of (d.suits || [])) {
+      const ids = [s.id, ...(Array.isArray(s.ids) ? s.ids : [])];
+      for (const id of ids) if (id != null) suitById.set(Number(id), s);
+    }
+    // conditional bonus lines (mostly refine-threshold: "+10 Max HP +3%")
+    const resolveConditions = (it: any): string[] =>
+      (it.conditions || [])
+        .map((id: any) => { const c = condLib[id] || condLib[String(id)]; return c && (c.text || c.name); })
+        .filter(Boolean)
+        .map(stripColorTags);
+    // set effects: name, member pieces, and per-piece-count bonuses
+    const resolveSets = (it: any): EquipSet[] =>
+      (it.suits || [])
+        .map((id: any) => suitById.get(Number(id)))
+        .filter(Boolean)
+        .map((s: any) => ({
+          name: stripColorTags(s.name),
+          components: (s.components || []).map((c: any) => stripColorTags(c.name)).filter(Boolean),
+          effects: (s.effects || [])
+            .map((e: any) => ({ count: Number(e.num) || 0, desc: stripColorTags(e.desc) }))
+            .filter((e: any) => e.desc),
+        }));
+    const resolveAbilities = (it: any): string[] => {
+      const out: string[] = [];
+      (it.stunts || []).forEach((id: any) => {
+        const s = stuntLib[id] || stuntLib[String(id)];
+        if (s && s.name) out.push(stripColorTags(s.name) + (s.desc ? ": " + stripColorTags(s.desc) : ""));
+      });
+      (it.buffs || []).forEach((id: any) => {
+        const b = buffLib[id] || buffLib[String(id)];
+        if (b && (b.name || b.desc)) out.push([stripColorTags(b.name), stripColorTags(b.desc)].filter(Boolean).join(": "));
+      });
+      (it.fixedAffixes || []).forEach((id: any) => {
+        const a = affixLib[id] || affixLib[String(id)];
+        if (a && a.text) out.push(stripColorTags(a.text));
+      });
+      return out;
+    };
     items = (d.items || []).map((it: any) => {
       // real schema: it.itemType (numeric) is the slot; name is in itemTypes[itemType].name
       const slotKey = ITEM_TYPE_SLOT[Number(it.itemType)] || "other";
@@ -455,7 +514,7 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
         id: it.id,
         title: stripColorTags(it.name),
         subtitle: slot || (it.openLevel ? "Lv." + it.openLevel : undefined),
-        effects: it.desc ? [stripColorTags(it.desc)] : [],
+        effects: [it.desc ? stripColorTags(it.desc) : "", ...resolveAbilities(it)].filter(Boolean),
         iconName: it.icon,
         // equipment icons live under /media/images/item/<icon>.webp when not in icon_paths
         iconUrl: it.icon ? "item/" + it.icon + ".webp" : undefined,
@@ -468,8 +527,11 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
         jobLimits: Array.isArray(it.jobLimits) ? it.jobLimits.map(Number) : [],
         jobAll: !!it.jobAll,
         subtypeName,
+        subtypeCode: it.itemSubtype != null ? Number(it.itemSubtype) : undefined,
         twoHanded,
         reqLevel: it.openLevel ? Number(it.openLevel) : undefined,
+        conditions: resolveConditions(it),
+        sets: resolveSets(it),
         tags: {
           quality: qualityTag(it.quality),
           slot: slot || "",
@@ -688,6 +750,23 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
     const elements = d.elements || {};
     const packages = d.effectPackages || {};   // pkgId -> [{ effectId, needLevel, weight }]
     const configs = d.effectConfigs || {};      // effectId -> { name, desc, level, color }
+    const affixRanges = d.affixRanges || {};    // attrId -> { libId -> { min, max } }
+    const runeAttrs = d.attributes || {};       // attrId -> { showName, percentageShow }
+    // the stat lines a rune can roll (its concrete "ability"), from affixesLibrary.
+    const runeAffixLines = (libId: any): DetailRow[] => {
+      const out: DetailRow[] = [];
+      const lib = String(libId);
+      for (const attrId of Object.keys(affixRanges)) {
+        const rng = affixRanges[attrId][lib];
+        if (!rng) continue;
+        const a = runeAttrs[attrId] || runeAttrs[String(attrId)] || {};
+        const pct = a.percentageShow ? "%" : "";
+        const min = Number(rng.min), max = Number(rng.max);
+        const val = "+" + (min === max ? min : min + "~" + max) + pct;
+        out.push({ label: stripColorTags(a.showName || ("Attr " + attrId)), value: val });
+      }
+      return out;
+    };
     // rune baseItems carry no icon field; map the element to its elemental-stone
     // icon (these keys exist in icon_paths.json). Lumina/holy has no stone icon.
     const ELEMENT_ICON: Record<number, string> = {
@@ -731,6 +810,11 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
           Array.from(new Set(byLevel[Number(lvl)])).forEach((line) => effects.push("• " + line));
         });
 
+      const details: DetailRow[] = [];
+      if (elName) details.push({ label: locale === "th-TH" ? "ธาตุ" : "Element", value: elName });
+      // the rune's rollable stats (its core ability — what it can grant)
+      details.push(...runeAffixLines(r.affixesLibrary));
+
       return {
         id: r.id,
         title: r.filterName || elName || String(r.id),
@@ -738,7 +822,9 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
         quality: r.quality,
         iconName: r.icon || ELEMENT_ICON[r.element] || undefined,
         effects,
-        details: elName ? [{ label: locale === "th-TH" ? "ธาตุ" : "Element", value: elName }] : [],
+        details,
+        slotKey: elName || undefined,   // group the rune list by element
+        slot: elName || undefined,
         tags: { quality: qualityTag(r.quality), element: elName || "" },
       };
     });
@@ -749,7 +835,201 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
     return { items, filters };
   }
 
+  if (kind === "affix") {
+    const data = await fetchAffixData(locale);
+    const index = await fetchSkillIndex(locale).catch(() => ({} as Record<number, JobNode>));
+    const th = locale === "th-TH";
+
+    // every stunt id available on a weapon type / armor slot — combining BOTH the
+    // job-forge map AND the level-based packages (the latter is where the ~350
+    // "missing" affixes live), so the browse is complete.
+    const pkgStunts = (pids: number[]) => pids.flatMap((pid) => (data.packages[String(pid)] || []).map((s) => s.id));
+    const levelIds = (m: Record<string, Record<string, number[]>>, t: string) =>
+      Object.values(m[t] || {}).flatMap((pids) => pkgStunts(pids));
+
+    type Sec = { key: string; label: string; ids: number[] };
+    const secs: Sec[] = [];
+
+    // one section per CLASS: the affixes it can forge on the weapon types it uses
+    // (its own job-forge stunts + the type's level-based stunts).
+    const classTypes = new Map<number, Set<string>>();
+    Object.keys(data.weaponForge).forEach((t) =>
+      Object.keys(data.weaponForge[t] || {}).forEach((j) => {
+        const job = Number(j);
+        if (!classTypes.has(job)) classTypes.set(job, new Set());
+        classTypes.get(job)!.add(t);
+      })
+    );
+    [...classTypes.keys()].sort((a, b) => a - b).forEach((job) => {
+      const ids = new Set<number>();
+      classTypes.get(job)!.forEach((t) => {
+        (data.weaponForge[t]?.[String(job)] || []).forEach((i) => ids.add(i));
+        levelIds(data.index.weaponPkgByTypeLevel, t).forEach((i) => ids.add(i));
+      });
+      if (ids.size) secs.push({ key: "cls_" + job, label: stripColorTags(index[job]?.name) || ("Job " + job), ids: [...ids] });
+    });
+
+    // universal gear sections (armor / cape / accessory apply to every class)
+    const gear: [string, string, string][] = [["4", "เกราะ (ทุกอาชีพ)", "Armor (all jobs)"], ["7", "ผ้าคลุม (ทุกอาชีพ)", "Cape (all jobs)"], ["10", "เครื่องประดับ (ทุกอาชีพ)", "Accessory (all jobs)"]];
+    gear.forEach(([s, tl, el]) => {
+      const ids = new Set<number>();
+      Object.values(data.armorForge[s] || {}).forEach((arr) => arr.forEach((i) => ids.add(i)));
+      levelIds(data.index.armorPkgByTypeLevel, s).forEach((i) => ids.add(i));
+      if (ids.size) secs.push({ key: "gear_" + s, label: th ? tl : el, ids: [...ids] });
+    });
+
+    items = [];
+    for (const sec of secs) {
+      // collapse a stunt family's quality tiers + levels into one row within the section
+      const groups = new Map<string, { name: string; quality: number; icon?: string; levels: Map<number, string>; stats?: Record<string, number> }>();
+      for (const id of sec.ids) {
+        const st = data.stuntById[id];
+        if (!st) continue;
+        const key = st.name + "|" + st.quality;
+        let g = groups.get(key);
+        if (!g) { g = { name: st.name, quality: st.quality, icon: st.icon, levels: new Map() }; groups.set(key, g); }
+        if (!g.levels.has(st.level)) g.levels.set(st.level, st.desc);
+        if (st.stats && Object.keys(st.stats).length) g.stats = st.stats;
+      }
+      for (const g of groups.values()) {
+        const lvls = [...g.levels.keys()].sort((a, b) => a - b);
+        items.push({
+          id: sec.key + "|" + g.name + "|" + g.quality,
+          title: g.name,
+          subtitle: lvls.length > 1 ? (th ? lvls.length + " ระดับ" : lvls.length + " levels") : undefined,
+          quality: g.quality,
+          iconName: g.icon,
+          iconUrl: g.icon ? "item/" + g.icon + ".webp" : undefined,
+          effects: lvls.map((lv) => "Lv." + lv + ": " + g.levels.get(lv)),
+          stats: g.stats,
+          slotKey: sec.key,
+          slot: sec.label,
+          tags: { quality: qualityTag(g.quality), slot: sec.label },
+        } as NormItem);
+      }
+    }
+    items.sort((a, b) => (b.quality || 0) - (a.quality || 0) || a.title.localeCompare(b.title));
+    const filters = [
+      buildFilter("slot", th ? "อาชีพ" : "Class", items),
+      buildFilter("quality", th ? "คุณภาพ" : "Quality", items),
+    ].filter(Boolean) as FilterDef[];
+    return { items, filters };
+  }
+
   return { items: [], filters: [] };
+}
+
+/* =========================================================================
+ * Equipment affixes ("stunts" / forge skills) — the affix planner dataset.
+ *   index:   /affix-simulator/data/stunt_package_index_<locale>.json
+ *   library: /affix-simulator/data/stunt_skill_library_<locale>.json
+ * A "package" groups one affix family's per-level entries. Weapons map by their
+ * subtype (itemSubtype == affix weapon_types 7001+); armor maps to assembly
+ * types — only Armor(4), Cape(7) and Accessory(10) carry affix packages.
+ * ========================================================================= */
+export interface AffixStunt {
+  id: number; name: string; desc: string; level: number;
+  quality: number; icon?: string; jobIds: number[];
+  stats?: Record<string, number>;   // flat bonuses parsed from the text (best-effort)
+}
+export interface AffixIndex {
+  weaponTypes: Record<string, { name: string; icon?: string }>;
+  assemblyTypes: Record<string, { name: string; icon?: string }>;
+  weaponPkgByTypeLevel: Record<string, Record<string, number[]>>;
+  armorPkgByTypeLevel: Record<string, Record<string, number[]>>;
+}
+export interface AffixData {
+  index: AffixIndex;
+  packages: Record<string, AffixStunt[]>;
+  stuntById: Record<number, AffixStunt>;          // global stunt id -> stunt
+  // forge eligibility: which stunt ids a job can forge on a weapon/armor type.
+  // This is the authoritative class filter (entry.job_ids alone is NOT — Monk &
+  // Crusader/Paladin only resolve correctly through these maps).
+  weaponForge: Record<string, Record<string, number[]>>;
+  armorForge: Record<string, Record<string, number[]>>;
+}
+export interface AffixOption { packageId: string; name: string; quality: number; icon?: string; entries: AffixStunt[]; }
+
+const _affixCache: Record<string, AffixData> = {};
+export async function fetchAffixData(locale: string): Promise<AffixData> {
+  if (_affixCache[locale]) return _affixCache[locale];
+  const [idx, lib] = await Promise.all([
+    getJSON(BASE_DATA + "/affix-simulator/data/stunt_package_index_" + locale + ".json"),
+    getJSON(BASE_DATA + "/affix-simulator/data/stunt_skill_library_" + locale + ".json"),
+  ]);
+  const packages: Record<string, AffixStunt[]> = {};
+  const stuntById: Record<number, AffixStunt> = {};
+  for (const [pid, p] of Object.entries((lib && lib.packages) || {})) {
+    packages[pid] = (((p as any).entries) || []).map((e: any) => {
+      const s = e.stunt || e;
+      const name = stripColorTags(s.name);
+      const desc = stripColorTags(s.desc);
+      const out: AffixStunt = {
+        id: Number(s.id),
+        name,
+        desc,
+        level: Number(s.level) || 1,
+        quality: Number(s.color) || 0,
+        icon: s.icon,
+        jobIds: Array.isArray(s.job_ids) ? s.job_ids.map(Number) : [],
+        stats: parseCardStats([name + " " + desc]),
+      };
+      stuntById[out.id] = out;
+      return out;
+    });
+  }
+  const fjf = (idx && idx.forge_job_filter) || {};
+  const data: AffixData = {
+    index: {
+      weaponTypes: (idx && idx.weapon_types) || {},
+      assemblyTypes: (idx && idx.assembly_types) || {},
+      weaponPkgByTypeLevel: (idx && idx.weapon_packages_by_type_and_level) || {},
+      armorPkgByTypeLevel: (idx && idx.armor_packages_by_type_and_level) || {},
+    },
+    packages,
+    stuntById,
+    weaponForge: fjf.weapon_stunts_by_type_and_job || {},
+    armorForge: fjf.armor_stunts_by_type_and_job || {},
+  };
+  _affixCache[locale] = data;
+  return data;
+}
+
+// Map an equipped item to its affix lookup (mode + type key), or null if the
+// slot can't take affixes (head/face/mouth/shoes/back/shield have no packages).
+export function affixSlotForItem(item: NormItem): { mode: "weapon" | "armor"; typeId: string } | null {
+  const k = item.slotKey || "";
+  if (k === "weapon") return item.subtypeCode ? { mode: "weapon", typeId: String(item.subtypeCode) } : null;
+  if (k === "armor") return { mode: "armor", typeId: "4" };
+  if (k === "garment") return { mode: "armor", typeId: "7" };
+  if (k.startsWith("accessory")) return { mode: "armor", typeId: "10" };
+  return null;
+}
+
+// The affixes an item can take for the build's class. `jobPath` is the class
+// chain from specific -> base (e.g. Paladin -> Crusader -> ...); the first id
+// the forge map knows wins, so advancement classes the affix system omits
+// (Paladin/223, Royal Guard/224, ...) fall back to their forge-able ancestor.
+export function affixOptionsForItem(data: AffixData, item: NormItem, jobPath: number[]): AffixOption[] {
+  const slot = affixSlotForItem(item);
+  if (!slot) return [];
+  const byType = (slot.mode === "weapon" ? data.weaponForge : data.armorForge)[slot.typeId] || {};
+  let ids: number[] | undefined;
+  for (const j of jobPath) { if (byType[String(j)]) { ids = byType[String(j)]; break; } }
+  if (!ids) ids = [...new Set(Object.values(byType).flat())];   // no class -> everything for this type
+  const groups = new Map<string, AffixOption>();
+  for (const id of ids) {
+    const s = data.stuntById[id];
+    if (!s) continue;
+    const key = s.name + "|" + s.quality;
+    let g = groups.get(key);
+    if (!g) { g = { packageId: key, name: s.name, quality: s.quality, icon: s.icon, entries: [] }; groups.set(key, g); }
+    if (!g.entries.some((x) => x.id === s.id)) g.entries.push(s);
+  }
+  const out = [...groups.values()];
+  out.forEach((g) => g.entries.sort((a, b) => a.level - b.level));
+  out.sort((a, b) => (b.quality || 0) - (a.quality || 0) || a.name.localeCompare(b.name));
+  return out;
 }
 
 /* =========================================================================
@@ -890,6 +1170,39 @@ export async function fetchSkillIndex(locale: string): Promise<Record<number, Jo
       hasSkills: !!j.has_skills,
     };
   });
+
+  // Heal gaps in the job tree: some advancement classes (e.g. Paladin/223,
+  // Champion/523) are referenced as a parent but omitted from the index, which
+  // strands their whole branch (Royal Guard, Sura) and hides them from the
+  // planner. Their per-job skill files DO exist, so pull each referenced-but-
+  // missing parent in to reconnect the chain.
+  const missing = new Set<number>();
+  for (const j of Object.values(out)) {
+    if (j.parent && !out[j.parent]) missing.add(j.parent);
+  }
+  if (missing.size) {
+    const healed = await Promise.all(
+      [...missing].map(async (id) => {
+        try {
+          const jd = await getJSON(BASE_DATA + "/skill-simulator/data/jobs_" + locale + "/" + id + ".json");
+          const job = jd.job || jd;
+          const count = job.skills ? Object.keys(job.skills).length : 0;
+          return {
+            id: Number(job.job_id ?? id),
+            name: stripColorTags(job.job_name || job.name || "Job " + id),
+            icon: job.job_icon,
+            parent: Number(job.parent) || 0,
+            children: Array.isArray(job.children) ? job.children.map(Number) : [],
+            points: Number(job.skill_point_limit) || 0,
+            hasSkills: count > 0,
+          } as JobNode;
+        } catch {
+          return null;
+        }
+      })
+    );
+    healed.forEach((n) => { if (n) out[n.id] = n; });
+  }
   return out;
 }
 
@@ -907,10 +1220,18 @@ export function skillPathTo(index: Record<number, JobNode>, target: number): num
   return path.length ? path : [101];
 }
 
-// every job in the path (incl. self) must have skills (matches the site's filter)
+// Playable classes the SEA skills_index still flags has_skills=false, but whose
+// job skill files we populate from the Taiwan dataset (see scripts/sync-data.mjs).
+// Force them visible like every other class. Drop an id once SEA flags it itself.
+export const SKILL_FORCE_JOBS = new Set<number>([722, 422, 432, 723, 423, 433]); // Alchemist/Bard/Dancer + T2 Creator/Clown/Gypsy
+
+// every job in the path (incl. self) must have skills (matches the site's filter),
+// or the class is force-shown and at least one ancestor carries skills.
 export function jobPathHasSkills(index: Record<number, JobNode>, jobId: number): boolean {
   const p = skillPathTo(index, jobId);
-  return p.length > 0 && p.every((id) => index[id] && index[id].hasSkills);
+  if (p.length > 0 && p.every((id) => index[id] && index[id].hasSkills)) return true;
+  if (SKILL_FORCE_JOBS.has(Number(jobId)) && p.some((id) => index[id] && index[id].hasSkills)) return true;
+  return false;
 }
 
 export async function fetchJobSkills(jobId: number | string, locale: string): Promise<{ skills: SkillNode[]; jobName: string }> {
