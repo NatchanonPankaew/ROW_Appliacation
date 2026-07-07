@@ -12,6 +12,8 @@ import { dirname, join } from "node:path";
 import { translateTwSkills } from "./translate-tw-skills.mjs";
 import { mergeTwAffixes } from "./merge-tw-affixes.mjs";
 import { applyTwAffixTh } from "./apply-tw-affix-th.mjs";
+import { mergeTwEquipment } from "./merge-tw-equipment.mjs";
+import { applyTwEquipTh } from "./apply-tw-equip-th.mjs";
 
 const ORIGIN = "https://roworlddb.com";
 const BASE = ORIGIN + "/sea";
@@ -132,6 +134,10 @@ async function main() {
   // Translate the Taiwan-only affixes (new classes) that arrive with Chinese
   // name/desc into Thai using the map in tw-affix-th.json.
   await applyTwAffixTh();
+  // Pull Taiwan's fuller equipment set (instrument/whip/knuckle + event gear) in,
+  // then translate the Taiwan-only item names to Thai.
+  await mergeTwEquipment();
+  await applyTwEquipTh();
 
   console.log("\nDone. " + okCount + " ok, " + failCount + " failed.");
 }
