@@ -10,6 +10,15 @@ import {
 
 const LOCALES = ["en-US", "th-TH", "zh-TW"];
 const Q_FILTERS = [6, 5, 4, 3, 2];
+// Rune ember color (1-5). In-game a rune's color is player-chosen, so the Runes
+// tab lets you recolor every rune icon; hexes mirror the site's elementColor().
+const RUNE_COLORS = [
+  { id: 1, hex: "#63B85C" },
+  { id: 2, hex: "#B08968" },
+  { id: 3, hex: "#3BA9FF" },
+  { id: 4, hex: "#F87171" },
+  { id: 5, hex: "#FBBF24" },
+];
 
 function Row({ item, iconUrl, onPress }: { item: NormItem; iconUrl: string | null; onPress: () => void }) {
   const q = qualityInfo(item.quality);
@@ -208,6 +217,8 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
   const [levelFilter, setLevelFilter] = useState<string | null>(null);
   const [detail, setDetail] = useState<NormItem | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [runeColor, setRuneColor] = useState(5);   // rune ember color (1-5)
+  const isRunes = kind === "runes";
 
   const hasQuality = KIND_HAS_QUALITY[kind];
   // level-range filter (monsters carry tags.level)
@@ -292,9 +303,16 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
     return m;
   }, [jobs]);
 
+  // rune-type icons carry a base ember name; recolor them with the chosen color
+  const iconFor = useCallback((it: NormItem) =>
+    it.emberIcon
+      ? resolveIconUrl({ ...it, iconUrl: `ember/${it.emberIcon}_${runeColor}.webp` }, iconPaths)
+      : resolveIconUrl(it, iconPaths),
+    [iconPaths, runeColor]);
+
   const renderItem = useCallback(({ item }: { item: NormItem }) => (
-    <Row item={item} iconUrl={resolveIconUrl(item, iconPaths)} onPress={() => setDetail(item)} />
-  ), [iconPaths]);
+    <Row item={item} iconUrl={iconFor(item)} onPress={() => setDetail(item)} />
+  ), [iconFor]);
 
   return (
     <View style={styles.container}>
@@ -311,6 +329,17 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
 
       <TextInput style={styles.search} placeholder="ค้นหาชื่อ/ความสามารถ เช่น กันสตัน ป้องกันไฟ"
         placeholderTextColor="#6B7079" value={query} onChangeText={setQuery} />
+
+      {isRunes && (
+        <View style={styles.runeColorRow}>
+          <Text style={styles.runeColorLabel}>{locale === "th-TH" ? "สีรูน" : "Rune color"}</Text>
+          {RUNE_COLORS.map((c) => (
+            <TouchableOpacity key={c.id} onPress={() => setRuneColor(c.id)}
+              style={[styles.colorDot, { backgroundColor: c.hex },
+                runeColor === c.id && styles.colorDotOn]} />
+          ))}
+        </View>
+      )}
 
       {(slotChips.length > 1 || subtypeChips.length > 1 || hasQuality) && (
         <TouchableOpacity style={styles.filterToggle} activeOpacity={0.7}
@@ -432,7 +461,7 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
       {detail && (
         <DetailModal
           item={detail}
-          iconUrl={resolveIconUrl(detail, iconPaths)}
+          iconUrl={iconFor(detail)}
           locale={locale}
           jobNames={jobNames}
           onClose={() => setDetail(null)}
@@ -474,6 +503,11 @@ const styles = StyleSheet.create({
   fText: { color: "#5A6781", fontSize: 13, fontWeight: "bold", lineHeight: 20, includeFontPadding: true },
   fTextOn: { color: "#FFFFFF", fontWeight: "bold" },
   count: { color: "#8A97AD", fontSize: 12, marginLeft: 18, marginVertical: 4 },
+  runeColorRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 18, marginTop: 12 },
+  runeColorLabel: { color: "#5A6781", fontSize: 13, fontWeight: "bold", marginRight: 10 },
+  colorDot: { width: 26, height: 26, borderRadius: 999, marginRight: 8,
+    borderWidth: 2, borderColor: "transparent" },
+  colorDotOn: { borderColor: "#41506B" },
   sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     backgroundColor: "#E8F2FD", paddingHorizontal: 18, paddingTop: 12, paddingBottom: 6 },
   sectionTitle: { color: "#5566C7", fontSize: 15, fontWeight: "bold" },

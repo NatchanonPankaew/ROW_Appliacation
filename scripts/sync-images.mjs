@@ -96,9 +96,10 @@ async function collect() {
     Object.values(runes?.baseItems || {}).forEach((r) =>
       add(r.icon || ELEMENT_ICON[r.element])
     );
-    // rune-type (ember) icons: /media/images/ember/<icon>_<elementId>.webp
+    // rune-type (ember) icons: /media/images/ember/<icon>_<color>.webp — mirror
+    // all 5 color variants since the Runes tab lets you recolor them (1-5).
     Object.values(runes?.effectGroups || {}).forEach((g) => {
-      if (g?.icon) add(undefined, `ember/${g.icon}_${g.elementId}.webp`);
+      if (g?.icon) for (let c = 1; c <= 5; c++) add(undefined, `ember/${g.icon}_${c}.webp`);
       else add(ELEMENT_ICON[g?.elementId]);
     });
 

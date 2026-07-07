@@ -52,6 +52,9 @@ export interface NormItem {
   reqLevel?: number;         // level required to equip (from openLevel)
   // conditional bonuses (mostly refine-threshold lines, e.g. "+10 Max HP +3%")
   conditions?: string[];
+  // rune type: base ember icon name; the color (1-5) is chosen in the UI and
+  // appended -> /media/images/ember/<emberIcon>_<color>.webp
+  emberIcon?: string;
   // set/suit effects this item belongs to
   sets?: EquipSet[];
 }
@@ -856,10 +859,11 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
         id: g.group,
         title: stripColorTags(g.name),
         subtitle: elName,
-        // ember icons live at /media/images/ember/<icon>_<elementId>.webp (not in
-        // icon_paths), so pass them via iconUrl; stone icon as last-resort fallback
+        // ember icons live at /media/images/ember/<icon>_<color>.webp (not in
+        // icon_paths). Default color = elementId; the Runes tab lets you recolor.
         iconName: g.icon ? undefined : ELEMENT_ICON[g.elementId] || undefined,
         iconUrl: g.icon ? "ember/" + g.icon + "_" + g.elementId + ".webp" : undefined,
+        emberIcon: g.icon || undefined,
         effects,
         slotKey: elName || undefined,
         slot: elName || undefined,
