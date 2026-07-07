@@ -839,6 +839,32 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
         tags: { quality: qualityTag(r.quality), element: elName || "" },
       };
     });
+
+    // Rune TYPES (ember effect groups) — the 33 selectable runes the planner
+    // offers, grouped by element, each with its 5 upgrade levels. baseItems above
+    // are the generic crystals; these are the actual named rune effects.
+    const th = locale === "th-TH";
+    const groups = d.effectGroups ? Object.values(d.effectGroups) : [];
+    for (const g of groups as any[]) {
+      const el = elements[g.elementId] || elements[String(g.elementId)];
+      const elName = (el && el.name) || undefined;
+      const levels = g.levels || {};
+      const effects = Object.keys(levels)
+        .sort((a, b) => Number(a) - Number(b))
+        .map((lv) => (th ? "เลเวล " : "Lv.") + lv + ": " + stripColorTags(levels[lv].desc));
+      items.push({
+        id: g.group,
+        title: stripColorTags(g.name),
+        subtitle: elName,
+        // ember icons aren't published upstream; reuse the element's stone icon
+        iconName: ELEMENT_ICON[g.elementId] || undefined,
+        effects,
+        slotKey: elName || undefined,
+        slot: elName || undefined,
+        tags: { element: elName || "", kind: th ? "ประเภทรูน" : "Rune type" },
+      });
+    }
+
     const filters = [
       buildFilter("element", locale === "th-TH" ? "ธาตุ" : "Element", items),
       buildFilter("quality", locale === "th-TH" ? "คุณภาพ" : "Quality", items),
