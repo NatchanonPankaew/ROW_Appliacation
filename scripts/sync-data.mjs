@@ -10,6 +10,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { translateTwSkills } from "./translate-tw-skills.mjs";
+import { mergeTwDruid } from "./merge-tw-druid.mjs";
+import { translateTwDruid } from "./translate-tw-druid.mjs";
 import { mergeTwAffixes } from "./merge-tw-affixes.mjs";
 import { applyTwAffixTh } from "./apply-tw-affix-th.mjs";
 import { mergeTwEquipment } from "./merge-tw-equipment.mjs";
@@ -128,6 +130,10 @@ async function main() {
 
   // Localize the Taiwan-sourced skill files (Bard/Dancer/Alchemist) to EN/TH.
   await translateTwSkills();
+  // Mirror the Taiwan-only Druid line (901 Druid -> 912 Karnos -> 913 Alitea)
+  // into the tree (SEA hasn't shipped it), then localize its skills to EN/TH.
+  await mergeTwDruid();
+  await translateTwDruid();
   // Pull Taiwan's fuller affix set (instrument/whip/knuckle + new classes) in,
   // keeping SEA's existing localized affix text.
   await mergeTwAffixes();
