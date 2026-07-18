@@ -7,16 +7,20 @@ import BrowseScreen from "./src/screens/BrowseScreen";
 import CharacterScreen from "./src/screens/CharacterScreen";
 import SkillsScreen from "./src/screens/SkillsScreen";
 import SupportScreen from "./src/screens/SupportScreen";
+import GemSetScreen from "./src/screens/GemSetScreen";
 import { Kind } from "./src/api/roworlddb";
 
-// "support" is an app-only tab (YouTube + donate), not a dataset Kind.
-type TabKey = Kind | "support";
+// "support" (YouTube + donate) and "gemset" (enchant planner) are app-only
+// tabs, not dataset Kinds.
+type TabKey = Kind | "support" | "gemset";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "character", label: "Character" },
   { key: "cards", label: "Cards" },
   { key: "equipment", label: "Equip" },
   { key: "affix", label: "Affix" },
+  { key: "gems", label: "Gems" },
+  { key: "gemset", label: "Set Gems" },
   { key: "skills", label: "Skills" },
   { key: "monsters", label: "Monster" },
   { key: "pets", label: "Pets" },
@@ -80,6 +84,8 @@ function Main() {
           <SkillsScreen />
         ) : tab === "support" ? (
           <SupportScreen />
+        ) : tab === "gemset" ? (
+          <GemSetScreen />
         ) : (
           <BrowseScreen key={tab} kind={tab} />
         )}
