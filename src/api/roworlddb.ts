@@ -17,7 +17,8 @@ export type Kind =
   | "maps"
   | "apocalypse"
   | "runes"
-  | "affix";
+  | "affix"
+  | "gems";
 
 export interface DetailRow { label: string; value: string; }
 export interface FilterDef { key: string; label: string; options: string[]; }
@@ -142,6 +143,7 @@ export const LOCALES = ["en-US", "th-TH", "zh-TW"];
 export const KIND_HAS_QUALITY: Record<Kind, boolean> = {
   character: false,
   cards: true, equipment: true, pets: true, shop: true, runes: true, affix: true,
+  gems: true,
   monsters: false, skills: false, maps: false, apocalypse: false,
 };
 
@@ -959,8 +961,223 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
     return { items, filters };
   }
 
+  if (kind === "gems") {
+    const th = locale === "th-TH";
+    const zh = locale === "zh-TW";
+
+    // Gem sources: scan the shop dataset for boxes/items that contain each gem
+    // (roworlddb has no gem dataset, but the shop boxPreview lists them), so the
+    // "ได้จาก" lines stay true to the current SEA shop without hand-upkeep.
+    const srcByGem = new Map<number, Map<string, Set<string>>>(); // gem -> box name -> stores
+    try {
+      const shop = await getJSON(BASE_DATA + "/shop/data/shop_" + locale + ".json");
+      for (const si of shop?.items || []) {
+        const inBox = (si?.boxPreview?.contents || []) as any[];
+        const direct = GEM_DEFS.some((g) => g.id === Number(si?.itemId)) ? [si] : [];
+        for (const c of [...inBox, ...direct]) {
+          const gid = Number(c.itemId);
+          if (!GEM_DEFS.some((g) => g.id === gid)) continue;
+          const box = c === si ? (th ? "ขายตรง" : "Direct sale") : String(si.name || "?");
+          let m = srcByGem.get(gid);
+          if (!m) { m = new Map(); srcByGem.set(gid, m); }
+          if (!m.has(box)) m.set(box, new Set());
+          if (si.storeName) m.get(box)!.add(String(si.storeName));
+        }
+      }
+    } catch { /* shop data unavailable — sources are optional */ }
+
+    const groupLabel: Record<GemGroup, string> = {
+      info: th ? "วิธีเอนแชนท์" : "How enchanting works",
+      stat: th ? "อัญมณีสเตตัส" : "Stat gems",
+      basic: th ? "อัญมณีทั่วไป" : "Basic gems",
+      set: th ? "อัญมณีเซตพิเศษ" : "Set gems",
+      tw: th ? "เฉพาะเซิร์ฟไต้หวัน" : "Taiwan-only",
+    };
+
+    // pseudo-item explaining the enchant system (mechanics from the TW guide;
+    // numbers per gem level aren't in any dataset, so none are invented here)
+    items = [{
+      id: "gem_howto",
+      title: th ? "ระบบเอนแชนท์อัญมณี (Gems)" : "Gem enchant system",
+      subtitle: th ? "กติกาหลักก่อนลงเม็ด" : "Core rules",
+      iconUrl: "item/icon_item_stone_07.webp",
+      effects: th ? [
+        "อุปกรณ์เอนแชนท์ได้ 7 ชิ้น: อาวุธ/เกราะ/มือรอง/ผ้าคลุม/รองเท้า/เครื่องประดับซ้าย-ขวา",
+        "ชิ้นละ 3 รู (อาวุธสองมือ 4 รู) — เม็ดชื่อเดียวกันใส่ได้ชิ้นละ 1 เม็ดเท่านั้น",
+        "เซ็ต = สูตรเม็ดเฉพาะชุด ต้องใส่ตรงสูตร 100% ถึงเปิดโบนัส — เม็ดนอกสูตรทำให้เซ็ตไม่ทำงาน",
+        "เลเวลเซ็ต = เลเวลเม็ดที่ต่ำสุดในชิ้นนั้น (อัปทุกเม็ดให้เท่ากันคุ้มกว่าเม็ดสูงเม็ดเดียว)",
+        "อัปเกรด: 3 เม็ดเลเวลต่ำ → 1 เม็ดเลเวลถัดไป · ถอดออกเม็ดจะแตกกลับเป็น Lv.1 ไม่สูญ",
+        "ซื้อเม็ดพื้นฐาน: กระเป๋า → แลกเปลี่ยน → สมาคมพ่อค้า → อัญมณี",
+        "แนวทางลงทุน: เล่นฟรีหยุด Lv.1-2 · สายทั่วไปหยุด Lv.3 (คุ้มสุด) · สายหนักค่อยดัน Lv.5+",
+        "ทดลองจัดสูตรต่อชิ้นได้ในแท็บ Set Gems",
+      ] : [
+        "7 enchantable pieces: weapon/armor/off-hand/cape/shoes/accessory L+R",
+        "3 sockets per piece (two-handed weapons: 4) — only ONE stone of the same name per piece",
+        "A set is a specific stone recipe; it activates only on a 100% match — off-recipe stones break it",
+        "Set level = the lowest gem level on that piece (level them evenly)",
+        "Upgrade: 3 low-level gems → 1 of the next level · removing splits back to Lv.1 losslessly",
+        "Buy basics: Bag → Transaction → Chamber of Commerce → Gem",
+        "Investment: F2P stop at Lv.1-2 · most players stop at Lv.3 (best value) · whales push Lv.5+",
+      ],
+      slotKey: "gem_info", slot: groupLabel.info,
+      tags: { slot: groupLabel.info },
+    }];
+
+    for (const g of GEM_DEFS) {
+      const effects = (th ? g.thFx : g.enFx).slice();
+      const details: DetailRow[] = [];
+      const src = srcByGem.get(g.id);
+      if (src) {
+        for (const [box, stores] of src) {
+          details.push({
+            label: (th ? "ได้จาก: " : "From: ") + box,
+            value: [...stores].join(", ") || "-",
+          });
+        }
+      } else if (g.group === "tw") {
+        details.push({
+          label: th ? "แหล่งที่มา" : "Source",
+          value: th ? "ยังไม่เปิดในเซิร์ฟ SEA (มีเฉพาะไต้หวัน)" : "Not yet on SEA (Taiwan only)",
+        });
+      }
+      items.push({
+        id: g.id,
+        title: zh ? g.zh : th ? g.th : g.en,
+        subtitle: zh ? g.en : g.zh + " · " + (th ? g.en : g.th),
+        quality: g.quality,
+        iconUrl: "item/" + g.icon + ".webp",
+        effects,
+        details,
+        slotKey: "gem_" + g.group, slot: groupLabel[g.group],
+        tags: { slot: groupLabel[g.group], quality: qualityTag(g.quality) },
+      });
+    }
+
+    const filters = [
+      buildFilter("slot", th ? "หมวด" : "Group", items),
+      buildFilter("quality", th ? "คุณภาพ" : "Quality", items),
+    ].filter(Boolean) as FilterDef[];
+    return { items, filters };
+  }
+
   return { items: [], filters: [] };
 }
+
+/* =========================================================================
+ * Gems (enchant stones / 附魔石) — socketed into equipment for stat + set
+ * bonuses. roworlddb serves NO gem dataset, so this catalog is hand-built from
+ * the SEA shop data (names/icons/quality; th/en/zh names are the server's own
+ * localized strings) plus the tomchun.tw enchant guide for the documented set
+ * effects (จิตนักสู้/Sharp/Magic...). Per-level numbers are deliberately not
+ * listed anywhere — they are not in any public dataset; don't invent them.
+ * ========================================================================= */
+type GemGroup = "info" | "stat" | "basic" | "set" | "tw";
+export interface GemDef {
+  id: number;                 // in-game item id (14135xxx, from shop data)
+  th: string; en: string; zh: string;
+  icon: string;               // file under /media/images/item/
+  quality: number;            // 3 = shop basics (blue), 5 = set gems (gold)
+  group: Exclude<GemGroup, "info">;
+  thFx: string[]; enFx: string[];
+}
+
+// Full icon URL for a gem (chips outside the Browse list can't go through
+// resolveIconUrl, which needs a NormItem).
+export const gemIconUrl = (g: GemDef) => BASE_IMG + "item/" + g.icon + ".webp";
+
+const FX_UNKNOWN_TH = "ตัวเลขจริงยังไม่มีในฐานข้อมูลเปิด — เช็คในเกมก่อนลงทุน";
+const FX_UNKNOWN_EN = "Exact numbers aren't in any public dataset — verify in-game";
+
+export const GEM_DEFS: GemDef[] = [
+  // --- stat gems (Chamber of Commerce basics; +their stat, set boosts that line) ---
+  { id: 14135013, th: "STR Gem", en: "STR Gem", zh: "力量寶石", icon: "icon_item_enchantstone_11", quality: 3, group: "stat",
+    thFx: ["เพิ่ม STR ต่อเม็ด — สายตีกายภาพ (สเกลกับ STR)"], enFx: ["+STR per gem — physical builds"] },
+  { id: 14135014, th: "Magic Gem", en: "Magic Gem", zh: "魔力寶石", icon: "icon_item_enchantstone_13", quality: 3, group: "stat",
+    thFx: ["เพิ่มพลังเวทต่อเม็ด", "เซตมนตรา: MATK% + ลดเวลาร่ายผันแปร — เซตหลักของสายเวท/ฮีล (สำคัญกับสกิลร่ายนาน)"],
+    enFx: ["+magic per gem", "Magic set: MATK% + variable-cast reduction — the caster/healer staple"] },
+  { id: 14135015, th: "AGI Gem", en: "AGI Gem", zh: "敏捷寶石", icon: "icon_item_enchantstone_12", quality: 3, group: "stat",
+    thFx: ["เพิ่ม AGI ต่อเม็ด — สาย ASPD/หลบ"], enFx: ["+AGI per gem — ASPD/dodge builds"] },
+  { id: 14135016, th: "DEX Gem", en: "DEX Gem", zh: "靈巧寶石", icon: "icon_item_enchantstone_14", quality: 3, group: "stat",
+    thFx: ["เพิ่ม DEX ต่อเม็ด — สายแม่นยำ/ธนู/ลดร่าย"], enFx: ["+DEX per gem — hit/bow/cast builds"] },
+  { id: 14135017, th: "VIT Gem", en: "VIT Gem", zh: "體力寶石", icon: "icon_item_enchantstone_16", quality: 3, group: "stat",
+    thFx: ["เพิ่ม VIT ต่อเม็ด — สายอึด/แทงค์"], enFx: ["+VIT per gem — tank/survival builds"] },
+  { id: 14135018, th: "อัญมณี LUK", en: "LUK Gem", zh: "幸運寶石", icon: "icon_item_enchantstone_15", quality: 3, group: "stat",
+    thFx: ["เพิ่ม LUK ต่อเม็ด — สายคริ/นก"], enFx: ["+LUK per gem — crit/falcon builds"] },
+  // --- basic colored gems (same General Gem Chest; effects not in open data) ---
+  { id: 14135011, th: "Garnet", en: "Garnet", zh: "深紅寶石", icon: "icon_item_enchantstone_01", quality: 3, group: "basic",
+    thFx: ["อัญมณีพื้นฐานจากหีบอัญมณีทั่วไป", FX_UNKNOWN_TH], enFx: ["Basic gem from the General Gem Chest", FX_UNKNOWN_EN] },
+  { id: 14135012, th: "Zircon", en: "Zircon", zh: "青綠寶石", icon: "icon_item_enchantstone_10", quality: 3, group: "basic",
+    thFx: ["อัญมณีพื้นฐานจากหีบอัญมณีทั่วไป", FX_UNKNOWN_TH], enFx: ["Basic gem from the General Gem Chest", FX_UNKNOWN_EN] },
+  { id: 14135005, th: "Ruby", en: "Ruby", zh: "紅寶石", icon: "icon_item_enchantstone_05", quality: 3, group: "basic",
+    thFx: ["อัญมณีพื้นฐานจากหีบอัญมณีทั่วไป", FX_UNKNOWN_TH], enFx: ["Basic gem from the General Gem Chest", FX_UNKNOWN_EN] },
+  { id: 14135006, th: "Emerald", en: "Emerald", zh: "綠寶石", icon: "icon_item_enchantstone_04", quality: 3, group: "basic",
+    thFx: ["อัญมณีพื้นฐานจากหีบอัญมณีทั่วไป", FX_UNKNOWN_TH], enFx: ["Basic gem from the General Gem Chest", FX_UNKNOWN_EN] },
+  { id: 14135007, th: "Sobbing Starlight", en: "Sobbing Starlight", zh: "星淚石", icon: "icon_item_enchantstone_22", quality: 3, group: "basic",
+    thFx: ["อัญมณีพื้นฐานจากหีบอัญมณีทั่วไป", FX_UNKNOWN_TH], enFx: ["Basic gem from the General Gem Chest", FX_UNKNOWN_EN] },
+  { id: 14135008, th: "Peridot", en: "Peridot", zh: "橄欖石", icon: "icon_item_enchantstone_25", quality: 3, group: "basic",
+    thFx: ["อัญมณีพื้นฐานจากหีบอัญมณีทั่วไป", FX_UNKNOWN_TH], enFx: ["Basic gem from the General Gem Chest", FX_UNKNOWN_EN] },
+  { id: 14135009, th: "Cat's Eye", en: "Cat's Eye", zh: "貓眼石", icon: "icon_item_enchantstone_24", quality: 3, group: "basic",
+    thFx: ["อัญมณีพื้นฐานจากหีบอัญมณีทั่วไป", FX_UNKNOWN_TH], enFx: ["Basic gem from the General Gem Chest", FX_UNKNOWN_EN] },
+  { id: 14135010, th: "Rose Quartz", en: "Rose Quartz", zh: "玫瑰石英", icon: "icon_item_enchantstone_26", quality: 3, group: "basic",
+    thFx: ["อัญมณีพื้นฐานจากหีบอัญมณีทั่วไป", FX_UNKNOWN_TH], enFx: ["Basic gem from the General Gem Chest", FX_UNKNOWN_EN] },
+  // --- set gems (gold; the three documented meta sets first) ---
+  { id: 14135025, th: "อัญมณีจิตนักสู้", en: "Battle Will Gem", zh: "鬥志寶石", icon: "icon_item_stone_07", quality: 5, group: "set",
+    thFx: ["เซตหลักสายสกิลกายภาพ: ATK% + ไม่สนป้องกัน (เจาะ DEF)",
+      "ใส่ช่องสายบู๊ (อาวุธ/เครื่องประดับ) ของสายสกิล เช่น สไปรัล, Cart Cannon, ซอนิค, กับดัก"],
+    enFx: ["The physical-skill staple: ATK% + ignore DEF",
+      "Socket on weapon/accessory for skill builds (Spiral, Cart Cannon, Sonic, traps)"] },
+  { id: 14135020, th: "Sharp Gem", en: "Sharpness Gem", zh: "尖銳寶石", icon: "icon_item_stone_02", quality: 5, group: "set",
+    thFx: ["เซตหลักสายออโต้/คริ: อัตราคริ + ดาเมจคริ",
+      "สายออโต้ต้องดันคริเกิน ~100% เพื่อชนะค่าต้านคริของบอส — เซตนี้คือคำตอบ"],
+    enFx: ["The auto-attack/crit staple: crit rate + crit damage",
+      "Auto builds need ~100%+ crit to beat boss crit-resist — this set is the answer"] },
+  { id: 14135021, th: "Famed Bow Gem", en: "Famed Bow Gem", zh: "名弓寶石", icon: "icon_item_stone_03", quality: 5, group: "set",
+    thFx: ["สายธนู/ระยะไกล — ทางเลือกแทนจิตนักสู้ของสายยิงสกิล (ถ้าเวอร์ชันเปิดให้ใช้)"],
+    enFx: ["Bow/ranged set — alternative to Battle Will for shot-skill builds (if enabled this patch)"] },
+  { id: 14135019, th: "Imperious Gem", en: "Domineering Gem", zh: "霸氣寶石", icon: "icon_item_stone_01", quality: 5, group: "set",
+    thFx: ["เม็ดระดับสูง — ยังซื้อจากร้านปกติไม่ได้ คาดดรอปจากคอนเทนต์ยาก/เวิลด์บอส", FX_UNKNOWN_TH],
+    enFx: ["High-tier gem — not purchasable yet; expected from hard content/world boss", FX_UNKNOWN_EN] },
+  { id: 14135026, th: "Healing Gem", en: "Healing Gem", zh: "治療寶石", icon: "icon_item_stone_08", quality: 5, group: "set",
+    thFx: ["แนวทางตามชื่อ: สายฮีล/ซัพพอร์ต", FX_UNKNOWN_TH], enFx: ["By name: heal/support line", FX_UNKNOWN_EN] },
+  { id: 14135027, th: "Diamond Gem", en: "Adamant Gem", zh: "金剛寶石", icon: "icon_item_stone_09", quality: 5, group: "set",
+    thFx: ["แนวทางตามชื่อ: สายป้องกัน/แทงค์", FX_UNKNOWN_TH], enFx: ["By name: defense/tank line", FX_UNKNOWN_EN] },
+  { id: 14135031, th: "อัญมณีผิวศิลา", en: "Stone Skin Gem", zh: "石膚寶石", icon: "icon_item_stone_13", quality: 5, group: "set",
+    thFx: ["แนวทางตามชื่อ: ป้องกันกายภาพ/ลดดาเมจ", FX_UNKNOWN_TH], enFx: ["By name: physical defense/mitigation", FX_UNKNOWN_EN] },
+  { id: 14135028, th: "Compassion Gem", en: "Charity Gem", zh: "愛心寶石", icon: "icon_item_stone_10", quality: 5, group: "set",
+    thFx: ["แนวทางตามชื่อ: สายซัพพอร์ต", FX_UNKNOWN_TH], enFx: ["By name: support line", FX_UNKNOWN_EN] },
+  { id: 14135029, th: "อัญมณีสันติ", en: "Serenity Gem", zh: "平寧寶石", icon: "icon_item_stone_11", quality: 5, group: "set",
+    thFx: ["แนวทางตามชื่อ: ซัพพอร์ต/ฟื้นฟู", FX_UNKNOWN_TH], enFx: ["By name: support/recovery", FX_UNKNOWN_EN] },
+  { id: 14135030, th: "Benediction Gem", en: "Benediction Gem", zh: "祝福寶石", icon: "icon_item_stone_12", quality: 5, group: "set",
+    thFx: ["แนวทางตามชื่อ: บั๊ฟ/ซัพพอร์ต", FX_UNKNOWN_TH], enFx: ["By name: buff/support", FX_UNKNOWN_EN] },
+  { id: 14135024, th: "อัญมณีมารวิญญาณ", en: "Arcane Spirit Gem", zh: "魔靈寶石", icon: "icon_item_stone_06", quality: 5, group: "set",
+    thFx: ["แนวทางตามชื่อ: สายเวท", FX_UNKNOWN_TH], enFx: ["By name: magic line", FX_UNKNOWN_EN] },
+  { id: 14135022, th: "อัญมณีเทพประทาน", en: "Divine Gift Gem", zh: "神賜寶石", icon: "icon_item_stone_04", quality: 5, group: "set",
+    thFx: ["เม็ดพิเศษระดับสูง", FX_UNKNOWN_TH], enFx: ["High-tier special gem", FX_UNKNOWN_EN] },
+  { id: 14135023, th: "อัญมณีปาฏิหาริย์", en: "Miracle Gem", zh: "神蹟寶石", icon: "icon_item_stone_05", quality: 5, group: "set",
+    thFx: ["เม็ดพิเศษระดับสูง", FX_UNKNOWN_TH], enFx: ["High-tier special gem", FX_UNKNOWN_EN] },
+  { id: 14135032, th: "อัญมณีดารา", en: "Stellar Gem", zh: "星辰寶石", icon: "icon_item_stone_14", quality: 5, group: "set",
+    thFx: ["เม็ดพิเศษ", FX_UNKNOWN_TH], enFx: ["Special gem", FX_UNKNOWN_EN] },
+  { id: 14135033, th: "อัญมณีวิญญาณ", en: "Soul Gem", zh: "靈魂寶石", icon: "icon_item_stone_33", quality: 5, group: "set",
+    thFx: ["เม็ดพิเศษ", FX_UNKNOWN_TH], enFx: ["Special gem", FX_UNKNOWN_EN] },
+  { id: 14135034, th: "อัญมณีห้วงมิติ", en: "Void Gem", zh: "虛空寶石", icon: "icon_item_stone_34", quality: 5, group: "set",
+    thFx: ["เม็ดพิเศษ", FX_UNKNOWN_TH], enFx: ["Special gem", FX_UNKNOWN_EN] },
+  { id: 14135035, th: "อัญมณีเงาจันทรา", en: "Shadowmoon Gem", zh: "影月寶石", icon: "icon_item_stone_35", quality: 5, group: "set",
+    thFx: ["เม็ดพิเศษ", FX_UNKNOWN_TH], enFx: ["Special gem", FX_UNKNOWN_EN] },
+  // --- Taiwan-only gems (seen in the TW half-anniversary shop; Thai names coined
+  //     here like the other TW-only content — swap in SEA's names once it ships) ---
+  { id: 14135101, th: "อัญมณีพิณดารา", en: "Starstring Gem", zh: "星弦寶石", icon: "icon_item_stone_29", quality: 5, group: "tw",
+    thFx: ["แนวทางตามชื่อ: สายเครื่องดนตรี (Bard/Dancer)", FX_UNKNOWN_TH], enFx: ["By name: instrument line (Bard/Dancer)", FX_UNKNOWN_EN] },
+  { id: 14135102, th: "อัญมณีกายเหล็ก", en: "Iron Body Gem", zh: "鐵軀寶石", icon: "icon_item_stone_27", quality: 5, group: "tw",
+    thFx: ["แนวทางตามชื่อ: สายแทงค์/กายอึด", FX_UNKNOWN_TH], enFx: ["By name: tank/iron-body line", FX_UNKNOWN_EN] },
+  { id: 14135103, th: "อัญมณีศรลม", en: "Wind Arrow Gem", zh: "風矢寶石", icon: "icon_item_stone_30", quality: 5, group: "tw",
+    thFx: ["แนวทางตามชื่อ: สายธนู/ระยะไกล", FX_UNKNOWN_TH], enFx: ["By name: bow/ranged line", FX_UNKNOWN_EN] },
+  { id: 14135104, th: "อัญมณีม่านเงา", en: "Shadow Veil Gem", zh: "幽幕寶石", icon: "icon_item_stone_31", quality: 5, group: "tw",
+    thFx: ["แนวทางตามชื่อ: สายลอบเร้น/เงา", FX_UNKNOWN_TH], enFx: ["By name: stealth/shadow line", FX_UNKNOWN_EN] },
+  { id: 14135105, th: "อัญมณีคมนักล่า", en: "Hunting Blade Gem", zh: "獵刃寶石", icon: "icon_item_stone_28", quality: 5, group: "tw",
+    thFx: ["แนวทางตามชื่อ: สายคมมีด/นักล่า", FX_UNKNOWN_TH], enFx: ["By name: blade/hunter line", FX_UNKNOWN_EN] },
+  { id: 14135106, th: "อัญมณีพลังลับ", en: "Arcane Source Gem", zh: "秘源寶石", icon: "icon_item_stone_26", quality: 5, group: "tw",
+    thFx: ["แนวทางตามชื่อ: สายเวท/พลังลึกลับ", FX_UNKNOWN_TH], enFx: ["By name: magic/arcane line", FX_UNKNOWN_EN] },
+];
 
 /* =========================================================================
  * Equipment affixes ("stunts" / forge skills) — the affix planner dataset.
@@ -1133,6 +1350,13 @@ export const SLOT_DEFS: SlotDef[] = [
   { key: "tail",      order: 8,  aliases: ["尾飾", "หาง", "Tail"] },
   { key: "shoes",     order: 9,  aliases: ["鞋子", "รองเท้า", "Shoes", "Footgear", "Boots"] },
   { key: "accessory", order: 10, aliases: ["飾品", "เครื่องประดับ", "Accessory", "Accessories"] },
+  // gem-tab section keys (not equipment slots — only here so groupByType orders
+  // the Gems browse sections: how-to first, then stat/basic/set/TW gems)
+  { key: "gem_info",  order: 50, aliases: [] },
+  { key: "gem_stat",  order: 51, aliases: [] },
+  { key: "gem_basic", order: 52, aliases: [] },
+  { key: "gem_set",   order: 53, aliases: [] },
+  { key: "gem_tw",    order: 54, aliases: [] },
 ];
 
 const _slotAlias: Record<string, SlotDef> = {};

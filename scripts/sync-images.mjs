@@ -27,6 +27,18 @@ const ELEMENT_ICON = {
   4: "icon_elementstone_fire_01",
 };
 
+// Gem (enchant stone) icons used by the Gems tab — mirrors GEM_DEFS in
+// roworlddb.ts. These live under /media/images/item/ but only appear inside
+// shop boxPreview blobs, so the generic collectors above never reach them.
+const GEM_ICONS = [
+  ...[1, 4, 5, 10, 11, 12, 13, 14, 15, 16, 22, 24, 25, 26].map(
+    (n) => "icon_item_enchantstone_" + String(n).padStart(2, "0")
+  ),
+  ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 26, 27, 28, 29, 30, 31, 33, 34, 35].map(
+    (n) => "icon_item_stone_" + String(n).padStart(2, "0")
+  ),
+];
+
 let iconPaths = {};
 
 // Returns the upstream image URL for an (iconName, iconUrl) pair, or null.
@@ -75,6 +87,8 @@ async function readJSON(rel) {
 
 async function collect() {
   iconPaths = (await readJSON("skill-simulator/data/icon_paths.json")) || {};
+
+  for (const g of GEM_ICONS) add(undefined, "item/" + g + ".webp");
 
   for (const loc of LOCALES) {
     const cards = await readJSON(`card-simulator/data/handbook_cards_${loc}.json`);
