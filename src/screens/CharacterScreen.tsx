@@ -10,6 +10,7 @@ import {
   JobNode, SkillNode, SKILL_TIER_POOLS,
   fetchAffixData, affixSlotForItem, affixOptionsForItem,
   AffixData, AffixStunt, AffixOption,
+  GEM_DEFS, GemDef, gemIconUrl,
 } from "../api/roworlddb";
 
 const LOCALES = ["en-US", "th-TH", "zh-TW"];
@@ -238,6 +239,7 @@ type Preset = {
   skills: string[];
   gear: string[];
   cards: string[];
+  gems: string[];             // enchant-gem (อัญมณี) set to socket, per role
 };
 
 const PRESETS: Preset[] = [
@@ -254,10 +256,15 @@ const PRESETS: Preset[] = [
     ],
     gear: ["เน้น VIT / Max HP / DEF", "ลดดาเมจรับ (% damage reduction)", "เกราะธาตุ/ต้านสถานะ"],
     cards: ["การ์ดเพิ่ม HP% / VIT", "การ์ดลดดาเมจจากเผ่า/ขนาด", "การ์ดต้านสถานะ (สตัน/แช่แข็ง)"],
+    gems: [
+      "ชิ้นเกราะ: เม็ดสายป้องกัน/HP (VIT Gem หรือเม็ดเซตสายแทงค์)",
+      "อาวุธ/เครื่องประดับ: จิตนักสู้ (ATK% + เจาะ DEF) ไว้เก็บอั๊กกิโร่",
+      "เซ็ต = สูตรเม็ดเฉพาะชุด (เม็ดชื่อซ้ำใส่ชิ้นละ 1 เม็ด) — จัดสูตรได้ในแท็บ Set Gems",
+    ],
   },
   {
     role: "DPS กายภาพ / Physical",
-    match: ["knight", "ไนท์", "rune", "รูน", "assassin", "ครอส", "cross", "guillotine", "กิโยติน", "champion", "sura", "ซูระ", "monk", "มังค์", "shadow chaser", "rogue"],
+    match: ["knight", "ไนท์", "rune", "รูน", "assassin", "ครอส", "cross", "guillotine", "กิโยติน", "champion", "sura", "ซูระ", "monk", "มังค์", "shadow chaser", "rogue", "โร้ก", "stalker", "สทอล์คเกอร์", "thief", "โจร", "swordman", "swordsman", "นักดาบ", "smith", "สมิธ", "mechanic", "เมคานิค", "merchant", "พ่อค้า", "ตีเหล็ก", "druid", "ดรูอิด", "คาร์นอส", "karnos", "อลิเทีย", "alitea"],
     statOrder: ["STR", "DEX", "AGI", "LUK", "VIT"],
     targets: { STR: 120, DEX: 90, AGI: 90 },
     skills: [
@@ -268,10 +275,15 @@ const PRESETS: Preset[] = [
     ],
     gear: ["เน้น ATK / STR", "Crit หรือเจาะ DEF ตามสายตี", "เพิ่ม ASPD / ดาเมจต่อเผ่า"],
     cards: ["การ์ดเพิ่ม ATK/STR", "การ์ดดาเมจต่อเผ่า/ขนาดของบอส", "การ์ดเจาะ DEF / Crit"],
+    gems: [
+      "สายสกิล: จิตนักสู้ (ATK% + ไม่สนป้องกัน) ที่อาวุธ/เครื่องประดับ",
+      "สายออโต้/คริ: Sharp (คริ + ดาเมจคริ) — ดันคริให้เกิน ~100% สู้ต้านคริบอส",
+      "ต้นเกมคริยังไม่ถึง ใช้จิตนักสู้ก่อนได้ (ถอดเม็ดคืนเป็น Lv.1 ไม่สูญ)",
+    ],
   },
   {
     role: "ระยะไกล / Ranged",
-    match: ["hunter", "ฮันเตอร์", "sniper", "สไนเปอร์", "ranger", "เรนเจอร์", "archer", "อาเชอร์", "bard", "บาร์ด", "dancer", "แดนเซอร์", "clown", "gypsy", "minstrel", "wanderer", "gunslinger", "ปืน", "rebellion"],
+    match: ["hunter", "ฮันเตอร์", "sniper", "สไนเปอร์", "ranger", "เรนเจอร์", "archer", "อาเชอร์", "bard", "บาร์ด", "dancer", "แดนเซอร์", "clown", "gypsy", "minstrel", "wanderer", "gunslinger", "ปืน", "rebel", "rebellion", "night walker"],
     statOrder: ["AGI", "DEX", "LUK", "INT", "VIT"],
     targets: { AGI: 120, DEX: 110, LUK: 60 },
     skills: [
@@ -282,10 +294,15 @@ const PRESETS: Preset[] = [
     ],
     gear: ["เน้น ATK ระยะไกล / DEX", "Crit / ASPD", "ลูกศร/กระสุนธาตุให้ครบ"],
     cards: ["การ์ดเพิ่มดาเมจระยะไกล", "การ์ด DEX / ATK", "การ์ดดาเมจต่อเผ่า/ขนาด"],
+    gems: [
+      "สายออโต้ (ADL): Sharp — คริ+ดาเมจคริ ยิ่ง ASPD สูงยิ่งคุ้ม",
+      "สายสกิล/กับดัก: จิตนักสู้ (เม็ดสายเวทไม่บั๊ฟดาเมจกับดัก)",
+      "Famed Bow เป็นทางเลือกสายธนูถ้าแพตช์เปิดให้ใช้",
+    ],
   },
   {
     role: "สายเวท / Caster",
-    match: ["mage", "เมจ", "wizard", "วิซ", "warlock", "วอร์ล็อก", "sage", "เซจ", "professor", "sorcerer", "ซอเซอเรอร์", "alchemist", "อัลเคมิสต์", "อเคมิส", "creator", "genetic"],
+    match: ["mage", "เมจ", "wizard", "วิซ", "warlock", "วอร์ล็อก", "sage", "เซจ", "scholar", "สกอลาร์", "professor", "sorcerer", "ซอเซอเรอร์", "alchemist", "อัลเคมิสต์", "อเคมิส", "creator", "genetic"],
     statOrder: ["INT", "DEX", "VIT", "LUK", "AGI"],
     targets: { INT: 120, DEX: 90, VIT: 60 },
     skills: [
@@ -296,6 +313,10 @@ const PRESETS: Preset[] = [
     ],
     gear: ["เน้น MATK / INT", "ลดเวลาร่าย (variable cast)", "เพิ่ม SP / ดาเมจตามธาตุ"],
     cards: ["การ์ดเพิ่ม MATK/INT", "การ์ดดาเมจตามธาตุ", "การ์ดลดเวลาร่าย / เพิ่ม SP"],
+    gems: [
+      "Magic Gem ยกเซต — MATK% + ลดเวลาร่ายผันแปร (จำเป็นกับเมทีโอ/สกิลร่ายนาน)",
+      "ตายง่าย (PVP/ดันสูง): สลับชิ้นเกราะเป็นเม็ดสายป้องกัน/VIT",
+    ],
   },
   {
     role: "ซัพพอร์ต / Support",
@@ -310,6 +331,11 @@ const PRESETS: Preset[] = [
     ],
     gear: ["เน้น INT / พลังฮีล", "ลดเวลาร่าย / เพิ่ม SP", "VIT/Max HP กันตาย"],
     cards: ["การ์ดเพิ่ม INT / SP", "การ์ดลดเวลาร่าย", "การ์ด VIT / ต้านสถานะ"],
+    gems: [
+      "Magic ที่อาวุธ/เครื่องประดับ — พลังฮีล (MATK) + ลดร่าย รีเซอร์/บั๊ฟไวขึ้น",
+      "ชิ้นเกราะ: เม็ดสายป้องกัน/VIT กันตายเวลาดันสูง",
+      "สายตีอนเดด: Magic เหมือนกัน (ลดร่าย Magnus สำคัญมาก)",
+    ],
   },
 ];
 const GENERIC_PRESET: Preset = {
@@ -319,6 +345,11 @@ const GENERIC_PRESET: Preset = {
   skills: ["อัดสกิลโจมตีหลักให้เต็มก่อน", "ตามด้วยสกิลเสริม/บั๊ฟ", "ที่เหลือลงสกิลเอาตัวรอด"],
   gear: ["เลือกของที่เพิ่มสเตตัสหลักของสายตัวเอง", "ตีบวกชิ้นที่ให้โบนัสต่อ refine สูง", "เติมธาตุ/ต้านสถานะตามจุดที่ไปบ่อย"],
   cards: ["การ์ดเพิ่มสเตตัสหลัก", "การ์ดดาเมจ/ลดดาเมจตามบทบาท", "การ์ดต้านสถานะ"],
+  gems: [
+    "สายสกิลกายภาพ → จิตนักสู้ · สายออโต้คริ → Sharp · สายเวท/ฮีล → Magic",
+    "ชิ้นละ 3 รู (อาวุธสองมือ 4 รู) ห้ามเม็ดชื่อซ้ำในชิ้นเดียว — จัดสูตรเซ็ตได้ในแท็บ Set Gems",
+    "อัปเม็ดให้เลเวลเท่ากันทั้งชิ้น — เลเวลเซ็ตนับจากเม็ดต่ำสุด",
+  ],
 };
 
 function pickPreset(jobName: string): Preset {
@@ -375,7 +406,7 @@ function planAllocate(level: number, preset: Preset): Record<string, number> {
 type Variant = {
   name: string; statOrder: string[]; targets?: Record<string, number>; skillBoost: string[];
   // per-build guidance (shown instead of the role-level preset when a สาย is picked)
-  skills?: string[]; gear?: string[]; cards?: string[];
+  skills?: string[]; gear?: string[]; cards?: string[]; gems?: string[];
 };
 const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
   {
@@ -386,40 +417,46 @@ const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
         skillBoost: ["strafe", "double", "arrow", "true sight", "concentration", "owl", "vulture", "sharp", "สเตรฟ", "ลูกศร", "แม่นยำ"],
         skills: ["แม็กซ์ Double Strafe + ยิงรัว", "True Sight / Owl's Eye / Vulture Eye เพิ่มแม่น+ATK", "ที่เหลือลง ASPD / หลบ"],
         gear: ["ธนู ATK ระยะไกลสูง", "เพิ่ม AGI/ASPD + DEX", "ลูกศรธาตุครบมือ"],
-        cards: ["การ์ดเพิ่มดาเมจระยะไกล", "การ์ด AGI/ATK", "การ์ดดาเมจต่อเผ่า/ขนาด"] },
+        cards: ["การ์ดเพิ่มดาเมจระยะไกล", "การ์ด AGI/ATK", "การ์ดดาเมจต่อเผ่า/ขนาด"],
+        gems: ["Sharp ยกเซต — คริ+ดาเมจคริ สเกลแรงตาม ASPD ของ ADL", "ดันคริเกิน ~100% ก่อน ค่อยเทเม็ดที่เหลือให้ครบเซต"] },
       { name: "สายนก (Falcon)", statOrder: ["DEX", "LUK", "AGI", "INT", "VIT"], targets: { DEX: 110, LUK: 120, AGI: 80, INT: 60 },
         skillBoost: ["falcon", "blitz", "เหยี่ยว", "นก", "beat", "assault", "crow", "steel crow"],
         skills: ["แม็กซ์ Blitz Beat + Falcon Mastery", "Steel Crow เพิ่มดาเมจเหยี่ยว", "Owl's Eye/Vulture Eye เสริม DEX"],
         gear: ["เพิ่ม DEX/LUK/INT (ดาเมจเหยี่ยว)", "ของเสริมดาเมจสัตว์/อสูร", "ASPD"],
-        cards: ["การ์ด DEX/LUK", "ดาเมจต่อเผ่า", "เพิ่มดาเมจ Blitz/สัตว์"] },
+        cards: ["การ์ด DEX/LUK", "ดาเมจต่อเผ่า", "เพิ่มดาเมจ Blitz/สัตว์"],
+        gems: ["Sharp — สายนกยิงออโต้ถี่ คริบ่อยเรียกนกบ่อย", "สลับ LUK/DEX Gem ได้ถ้าอยากอัดสเตตัสเหยี่ยวตรงๆ"] },
       { name: "สายกับดัก (Trap)", statOrder: ["DEX", "INT", "VIT", "AGI", "LUK"], targets: { DEX: 110, INT: 90, VIT: 80 },
         skillBoost: ["trap", "กับดัก", "claymore", "blast", "land mine", "sandman", "ankle", "freezing", "flasher", "ทราป"],
         skills: ["แม็กซ์ Claymore Trap / Blast Mine", "Ankle Snare / Sandman คุมศัตรู", "Spring Trap / Remove Trap เสริม"],
         gear: ["เพิ่ม INT/DEX (ดาเมจกับดัก)", "ลดเวลาวางกับดัก", "VIT กันตาย"],
-        cards: ["การ์ด INT/DEX", "ดาเมจกับดัก/ตามธาตุ", "VIT/ต้านสถานะ"] },
+        cards: ["การ์ด INT/DEX", "ดาเมจกับดัก/ตามธาตุ", "VIT/ต้านสถานะ"],
+        gems: ["จิตนักสู้ — ดาเมจกับดักยังอิง ATK บางส่วน (เม็ดสายเวทไม่บั๊ฟกับดัก)"] },
     ],
   },
   {
     // Swordman / Knight / Lord Knight / Rune Knight
-    match: ["knight", "ไนท์", "rune", "รูน", "lord knight", "ลอร์ด"],
+    match: ["knight", "ไนท์", "rune", "รูน", "lord knight", "ลอร์ด", "swordman", "swordsman", "นักดาบ"],
     variants: [
       { name: "สายหอก (Pierce/Spiral)", statOrder: ["STR", "DEX", "VIT", "AGI"], targets: { STR: 120, DEX: 90, VIT: 90 },
         skillBoost: ["spear", "pierce", "spiral", "หอก", "แทง", "brandish"],
         skills: ["แม็กซ์ Pierce / Spiral Pierce", "ความชำนาญ Spear + ขี่ม้า (Cavalier)", "Provoke / Charge Attack เสริม"],
         gear: ["หอก ATK สูง / เจาะ DEF", "เพิ่ม STR/DEX", "ดาเมจต่อขนาดใหญ่ (หอกแรงกับ Large)"],
-        cards: ["การ์ด STR/ATK", "ดาเมจต่อขนาดใหญ่", "เจาะ DEF"] },
+        cards: ["การ์ด STR/ATK", "ดาเมจต่อขนาดใหญ่", "เจาะ DEF"],
+        gems: ["จิตนักสู้ ยกเซต — สายสกิลหอกต้องการ ATK% + เจาะ DEF ตรงตัวที่สุด"] },
       { name: "สายดาบ 2 มือ", statOrder: ["STR", "AGI", "LUK", "VIT"], targets: { STR: 120, AGI: 90, LUK: 60 },
         skillBoost: ["bowling", "bash", "two-hand", "sword", "ดาบ", "ฟัน", "magnum"],
         skills: ["แม็กซ์ Bowling Bash", "ความชำนาญดาบ + เพิ่มความเร็วโจมตีดาบ", "Bash/Magnum + Auto Counter (คริ)"],
         gear: ["ดาบ 2 มือ ATK สูง", "เพิ่ม STR/AGI + คริ", "ASPD"],
-        cards: ["การ์ด STR/ATK", "คริ/ASPD", "ดาเมจต่อเผ่า"] },
+        cards: ["การ์ด STR/ATK", "คริ/ASPD", "ดาเมจต่อเผ่า"],
+        gems: ["จิตนักสู้ ถ้าเน้นสกิล Bowling Bash · Sharp ถ้าเล่นออโต้คริ (ดาบสองมือมี 4 ช่อง)"] },
       // ไนท์เผา = Rune Knight Dragon Breath: ดาเมจสเกลตาม HP+SP → ไต้หวันดัน VIT+INT
       // แม็กซ์คู่กัน, DEX ดัน命中 (รวม >520), STR เก็บตกจากแต้มที่เหลือ
       { name: "ไนท์เผา (Dragon Breath)", statOrder: ["VIT", "INT", "DEX", "STR"], targets: { VIT: 120, INT: 120, DEX: 60 },
         skillBoost: ["dragon breath", "breath", "dragon", "draconic", "มังกร", "ลมหายใจ", "เผา", "fire", "ไฟ"],
         skills: ["แม็กซ์ Dragon Breath (ไฟ/น้ำ)", "ขี่มังกร (Dragon Training) + เพิ่ม HP/SP", "สกิลลดดาเมจ/เอาตัวรอด"],
         gear: ["เพิ่ม Max HP + Max SP (สเกลดาเมจ)", "ดาเมจระยะไกล/ธาตุไฟ", "VIT/INT"],
-        cards: ["การ์ด HP%/SP%", "ดาเมจธาตุไฟ/ระยะไกล", "VIT/INT + ลดดาเมจ"] },
+        cards: ["การ์ด HP%/SP%", "ดาเมจธาตุไฟ/ระยะไกล", "VIT/INT + ลดดาเมจ"],
+        gems: ["ดาเมจเผาสเกลจาก HP/SP ไม่ใช่ ATK — เกราะลง VIT Gem/เม็ดสาย HP", "ช่องบู๊ใช้จิตนักสู้คั่นได้ระหว่างรอเม็ดที่ตรงสาย"] },
     ],
   },
   {
@@ -430,12 +467,14 @@ const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
         skillBoost: ["shield", "defending", "provoke", "guard", "โล่", "ป้องกัน", "shield chain", "overbrand"],
         skills: ["แม็กซ์ Shield Chain / Shield Boomerang", "Defending Aura + Auto Guard / Reflect", "Provoke / Devotion เสริม"],
         gear: ["โล่ดี + เพิ่ม VIT/Max HP", "ลดดาเมจรับ (% reduction)", "เกราะธาตุ/ต้านสถานะ"],
-        cards: ["การ์ด HP%/VIT", "ลดดาเมจจากเผ่า/ขนาด", "ต้านสถานะ (สตัน/แช่แข็ง)"] },
+        cards: ["การ์ด HP%/VIT", "ลดดาเมจจากเผ่า/ขนาด", "ต้านสถานะ (สตัน/แช่แข็ง)"],
+        gems: ["เกราะ/ผ้าคลุม: เม็ดสายป้องกัน (VIT Gem/เม็ดเซตแทงค์)", "อาวุธ: จิตนักสู้ — Shield Chain สเกล ATK"] },
       { name: "Grand Cross", statOrder: ["VIT", "INT", "STR", "DEX"], targets: { VIT: 110, INT: 90, STR: 80, DEX: 50 },
         skillBoost: ["grand cross", "holy", "cross", "กางเขน", "ศักดิ์สิทธิ์"],
         skills: ["แม็กซ์ Grand Cross", "Holy Cross / Heal เสริม", "Defending / Auto Guard กันตาย"],
         gear: ["เพิ่ม INT/VIT + ดาเมจธาตุ Holy", "ของธาตุศักดิ์สิทธิ์", "Max HP/SP"],
-        cards: ["การ์ด INT/VIT", "ดาเมจธาตุ Holy", "ลดดาเมจ/ต้านสถานะ"] },
+        cards: ["การ์ด INT/VIT", "ดาเมจธาตุ Holy", "ลดดาเมจ/ต้านสถานะ"],
+        gems: ["Grand Cross สเกลทั้ง ATK/MATK — เลือกจิตนักสู้หรือ Magic ตามฝั่งที่บิลด์เน้น", "เกราะลงเม็ดสายป้องกันเพราะต้องยืนแช่กลางมอน"] },
     ],
   },
   {
@@ -446,17 +485,20 @@ const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
         skillBoost: ["meteor", "fire", "earth", "heaven", "ไฟ", "อุกกาบาต"],
         skills: ["แม็กซ์ Meteor Storm + Fire Bolt/Wall", "Heaven's Drive สาย Earth", "ลดเวลาร่าย + ฟื้น SP"],
         gear: ["MATK/INT + ดาเมจธาตุไฟ-ดิน", "ลดเวลาร่าย (VCT)", "เพิ่ม SP"],
-        cards: ["การ์ด MATK/INT", "ดาเมจธาตุไฟ/ดิน", "ลดเวลาร่าย/SP"] },
+        cards: ["การ์ด MATK/INT", "ดาเมจธาตุไฟ/ดิน", "ลดเวลาร่าย/SP"],
+        gems: ["Magic Gem ยกเซต — MATK% + ลดร่ายผันแปร คือเส้นเลือดของสายเมทีโอ"] },
       { name: "สายน้ำแข็ง/สายฟ้า", statOrder: ["INT", "DEX", "VIT", "LUK"], targets: { INT: 120, DEX: 99, VIT: 50 },
         skillBoost: ["storm", "jupitel", "frost", "cold", "lightning", "vermilion", "สายฟ้า", "น้ำแข็ง"],
         skills: ["แม็กซ์ Storm Gust / Lord of Vermilion", "Frost Diver / Jupitel Thunder", "ลดเวลาร่าย + ฟื้น SP"],
         gear: ["MATK/INT + ดาเมจธาตุน้ำ-ลม", "ลดเวลาร่าย (VCT)", "เพิ่ม SP"],
-        cards: ["การ์ด MATK/INT", "ดาเมจธาตุน้ำ/ลม", "ลดเวลาร่าย/SP"] },
+        cards: ["การ์ด MATK/INT", "ดาเมจธาตุน้ำ/ลม", "ลดเวลาร่าย/SP"],
+        gems: ["Magic Gem ยกเซต — Storm Gust/LoV ร่ายนาน ยิ่งต้องลดร่ายผันแปร"] },
       { name: "สายบอลต์ (Bolt)", statOrder: ["INT", "DEX", "VIT", "LUK"], targets: { INT: 120, DEX: 80, VIT: 50 },
         skillBoost: ["bolt", "soul", "napalm", "โบลต์"],
         skills: ["แม็กซ์ Bolt ธาตุที่ใช้ (ไฟ/น้ำ/ฟ้า)", "Soul Strike / Napalm Beat สาย Ghost", "Amplify / ลดเวลาร่าย"],
         gear: ["MATK/INT สูง", "ลดเวลาร่าย", "เพิ่ม SP"],
-        cards: ["การ์ด MATK/INT", "ดาเมจตามธาตุ", "ลดเวลาร่าย/SP"] },
+        cards: ["การ์ด MATK/INT", "ดาเมจตามธาตุ", "ลดเวลาร่าย/SP"],
+        gems: ["Magic Gem ยกเซต — โบลต์รัวขึ้นทั้งจาก MATK% และลดร่าย"] },
     ],
   },
   {
@@ -467,12 +509,14 @@ const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
         skillBoost: ["heal", "bless", "agi", "sanctuary", "kyrie", "ฮีล", "พร", "อวยพร"],
         skills: ["แม็กซ์ Heal + Blessing / Increase AGI", "Sanctuary / Kyrie Eleison", "Resurrection / Safety Wall"],
         gear: ["เพิ่ม INT + พลังฮีล", "ลดเวลาร่าย / เพิ่ม SP", "VIT/Max HP กันตาย"],
-        cards: ["การ์ด INT/SP", "ลดเวลาร่าย", "VIT/ต้านสถานะ"] },
+        cards: ["การ์ด INT/SP", "ลดเวลาร่าย", "VIT/ต้านสถานะ"],
+        gems: ["Magic ที่อาวุธ/เครื่องประดับ — ฮีลหนักขึ้น รีเซอร์/บั๊ฟไวขึ้น", "เกราะ: เม็ดสายป้องกัน/VIT ถ้าโดนรุมใน PVP/ดันสูง"] },
       { name: "สายตีอนเดด (Turn Undead)", statOrder: ["INT", "DEX", "VIT", "LUK"], targets: { INT: 120, DEX: 99, VIT: 60 },
         skillBoost: ["undead", "magnus", "holy light", "judex", "อนเดด", "ศักดิ์สิทธิ์"],
         skills: ["แม็กซ์ Turn Undead + Magnus Exorcismus", "Holy Light / Judex", "Blessing / Sanctuary เสริม"],
         gear: ["MATK/INT + ดาเมจธาตุ Holy", "ลดเวลาร่าย", "เพิ่ม SP"],
-        cards: ["การ์ด INT/MATK", "ดาเมจ Holy / ต่อ Undead", "ลดเวลาร่าย/SP"] },
+        cards: ["การ์ด INT/MATK", "ดาเมจ Holy / ต่อ Undead", "ลดเวลาร่าย/SP"],
+        gems: ["Magic Gem ยกเซต — Magnus/Turn Undead ร่ายนาน ลดร่ายผันแปรสำคัญสุด"] },
     ],
   },
   {
@@ -485,35 +529,40 @@ const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
         skillBoost: ["asura", "อสุระ", "raging palm", "palm strike", "explosive", "หมัดระเบิด", "ดีดจิต", "spirit sphere", "spirit", "zen", "fury", "ตะวัน"],
         skills: ["แม็กซ์ Raging Palm Strike / Explosive Fist (หมัดระเบิดพลัง)", "ดีดจิตไร้ขีดจำกัด + Zen เก็บ Spirit Sphere", "Cursed Circle คุมศัตรู"],
         gear: ["เพิ่ม STR/INT + Max SP (สเกล Asura)", "ดาเมจ/เจาะ DEF", "ลดคูลดาวน์"],
-        cards: ["การ์ด STR/INT", "ดาเมจต่อเผ่า/บอส", "SP / ลดดาเมจ"] },
+        cards: ["การ์ด STR/INT", "ดาเมจต่อเผ่า/บอส", "SP / ลดดาเมจ"],
+        gems: ["จิตนักสู้ — หมัดสายสกิลกิน ATK% + เจาะ DEF โดยตรง"] },
       { name: "คอมโบ (Combo)", statOrder: ["STR", "AGI", "DEX", "VIT"], targets: { STR: 110, AGI: 90, DEX: 80 },
         skillBoost: ["combo", "คอมโบ", "chain crush", "chain", "glacier", "raging palm", "fist", "หมัด", "investigate", "triple"],
         skills: ["Chain Crush Combo → Raging Palm Strike", "Glacier Fist เก็บคอมโบ", "Zen + จิตนักสู้ Sura เสริม"],
         gear: ["เพิ่ม STR/AGI + ASPD", "เจาะ DEF", "ดาเมจหมัด/ต่อเผ่า"],
-        cards: ["การ์ด STR/AGI", "ASPD / เจาะ DEF", "ดาเมจต่อเผ่า"] },
+        cards: ["การ์ด STR/AGI", "ASPD / เจาะ DEF", "ดาเมจต่อเผ่า"],
+        gems: ["จิตนักสู้ สายคอมโบสกิล · Sharp ถ้าบิลด์ผสมออโต้คริ"] },
     ],
   },
   {
-    match: ["assassin", "แอสซาซิน", "cross", "guillotine", "กิโยติน"],
+    match: ["assassin", "แอสซาซิน", "cross", "guillotine", "กิโยติน", "thief", "โจร"],
     variants: [
       // เมตาไต้หวัน (十字刺客): กาต้าร์ดับเบิลคริ — 暴擊型 STR/AGI/LUK
       { name: "กาต้าร์ คริ (暴擊)", statOrder: ["AGI", "STR", "LUK", "DEX"], targets: { AGI: 110, STR: 110, LUK: 90 },
         skillBoost: ["katar", "grimtooth", "cloak", "crit", "กะตาร์", "คริ", "拳刃"],
         skills: ["แม็กซ์ Sonic Blow + ความชำนาญกาต้าร์", "Enchant Poison / Grimtooth", "Cloaking / Improve Dodge"],
         gear: ["กาต้าร์ ATK/คริสูง", "เพิ่ม AGI/STR/LUK + คริ", "ASPD"],
-        cards: ["การ์ดคริ/ATK", "ดาเมจต่อเผ่า/ขนาด", "ASPD"] },
+        cards: ["การ์ดคริ/ATK", "ดาเมจต่อเผ่า/ขนาด", "ASPD"],
+        gems: ["Sharp ยกเซต — เมตาหลักของแอสซาซินคริ ดันคริเกิน ~100% (กาต้าร์นับสองมือ = 4 ช่อง)"] },
       // 音投型 (Sonic Throw) — ไต้หวันใช้ STR/VIT/LUK (อึดกว่า, ใช้ซอนิคโยน)
       { name: "กาต้าร์ ซอนิค (音投)", statOrder: ["STR", "VIT", "LUK", "AGI"], targets: { STR: 110, VIT: 90, LUK: 90 },
         skillBoost: ["sonic", "throw", "ซอนิค", "音投", "音速", "投擲"],
         skills: ["แม็กซ์ Sonic Blow / ซอนิคโยน", "ความชำนาญกาต้าร์ + Enchant Poison", "Cloaking + สกิลเอาตัวรอด"],
         gear: ["กาต้าร์ ATK สูง", "เพิ่ม STR/VIT/LUK", "Max HP"],
-        cards: ["การ์ด STR/HP%", "ดาเมจต่อเผ่า", "ต้านสถานะ"] },
+        cards: ["การ์ด STR/HP%", "ดาเมจต่อเผ่า", "ต้านสถานะ"],
+        gems: ["จิตนักสู้ — ซอนิคเป็นสายสกิล กิน ATK% + เจาะ DEF เต็มๆ"] },
       // ดาบคู่ = Double Attack เน้น ASPD สูงสุด + STR, DEX พอแม่น
       { name: "ดาบคู่ (Double Attack)", statOrder: ["AGI", "STR", "DEX", "LUK"], targets: { AGI: 120, STR: 110, DEX: 50 },
         skillBoost: ["double", "red cut", "dual", "dagger", "ดาบคู่", "ดับเบิล", "กริช"],
         skills: ["แม็กซ์ Double Attack + ความชำนาญดาบคู่", "Enchant Poison / Sonic Blow เสริม", "Improve Dodge / Cloaking"],
         gear: ["กริช ATK/ASPD คู่", "เพิ่ม AGI/STR", "ดัน ASPD ให้ถึงเพดาน"],
-        cards: ["การ์ด AGI/ATK", "ASPD", "ดาเมจต่อเผ่า"] },
+        cards: ["การ์ด AGI/ATK", "ASPD", "ดาเมจต่อเผ่า"],
+        gems: ["Sharp — ออโต้รัวคูณกับคริ/ดาเมจคริคุ้มสุด", "คริยังต่ำช่วงต้น ใช้จิตนักสู้คั่นก่อนได้"] },
     ],
   },
   {
@@ -523,12 +572,136 @@ const VARIANT_SETS: { match: string[]; variants: Variant[] }[] = [
         skillBoost: ["rapid", "desperado", "bullet", "gatling", "rain", "กระสุน"],
         skills: ["แม็กซ์ Rapid Shower / Desperado", "Gatling Fever + Increase Accuracy", "Madness Canceller"],
         gear: ["ปืน ATK ระยะไกลสูง", "เพิ่ม DEX/AGI + ASPD", "กระสุนธาตุ"],
-        cards: ["การ์ด DEX/ATK", "ดาเมจระยะไกล", "ASPD"] },
+        cards: ["การ์ด DEX/ATK", "ดาเมจระยะไกล", "ASPD"],
+        gems: ["สายสกิลล้วน (ไม่ออโต้): จิตนักสู้ · ถ้าเล่นแบบยิงออโต้แทรก: Sharp"] },
       { name: "คริ/Single (Crit)", statOrder: ["DEX", "LUK", "AGI", "VIT"], targets: { DEX: 110, LUK: 110 },
         skillBoost: ["single", "tracking", "crit", "snipe", "คริ"],
         skills: ["แม็กซ์ Tracking / Single Action (คริ)", "Snake's Eye / Increase Accuracy", "Gunslinger Mastery"],
         gear: ["ปืนคริสูง", "เพิ่ม DEX/LUK + คริ", "กระสุนธาตุ"],
-        cards: ["การ์ดคริ/DEX", "ดาเมจระยะไกล", "เจาะ DEF"] },
+        cards: ["การ์ดคริ/DEX", "ดาเมจระยะไกล", "เจาะ DEF"],
+        gems: ["Sharp ยกเซต — สายคริของนักปืนพึ่งคริ+ดาเมจคริเป็นหลัก"] },
+    ],
+  },
+  {
+    // Rogue / Stalker / Shadow Chaser
+    match: ["rogue", "โร้ก", "stalker", "สทอล์คเกอร์", "chaser", "เชสเซอร์"],
+    variants: [
+      { name: "ออโต้/คริ", statOrder: ["AGI", "STR", "LUK", "DEX"], targets: { AGI: 120, STR: 100, LUK: 80 },
+        skillBoost: ["double", "attack", "dagger", "ดาบ", "กริช", "คริ", "snatch", "vulture"],
+        skills: ["แม็กซ์พาสซีฟโจมตี/ASPD ของกริช-ธนู", "สกิลขโมย/ก็อปสกิลตามสาย", "Hiding/Tunnel Drive เอาตัวรอด"],
+        gear: ["กริชหรือธนู ATK/ASPD สูง", "เพิ่ม AGI/STR + คริ", "ASPD"],
+        cards: ["การ์ด AGI/ATK", "คริ/ASPD", "ดาเมจต่อเผ่า"],
+        gems: ["Sharp — ออโต้ถี่คูณกับคริ/ดาเมจคริ", "คริต่ำช่วงต้นใช้จิตนักสู้คั่นได้"] },
+      { name: "สายสกิล (Back Stab/Raid)", statOrder: ["STR", "AGI", "DEX", "VIT"], targets: { STR: 110, AGI: 90, DEX: 70 },
+        skillBoost: ["back stab", "raid", "intimidate", "แทงหลัง", "พลิ้ว", "sightless"],
+        skills: ["แม็กซ์สกิลแทงหลัก + คอมโบเปิดตัว", "สกิลก็อป/ปล้นบั๊ฟช่วยทีม", "Hiding/หลบหนีเสริม"],
+        gear: ["อาวุธ ATK สูง / เจาะ DEF", "เพิ่ม STR/AGI", "ดาเมจต่อเผ่า"],
+        cards: ["การ์ด STR/ATK", "เจาะ DEF", "ดาเมจต่อเผ่า/ขนาด"],
+        gems: ["จิตนักสู้ — สกิลกายภาพกิน ATK% + เจาะ DEF เต็มๆ"] },
+    ],
+  },
+  {
+    // Merchant / Blacksmith / Whitesmith / Mechanic
+    match: ["smith", "สมิธ", "mechanic", "เมคานิค", "merchant", "พ่อค้า", "ตีเหล็ก"],
+    variants: [
+      { name: "สายสกิล (Mammonite/ทุบ)", statOrder: ["STR", "DEX", "VIT", "AGI"], targets: { STR: 120, DEX: 90, VIT: 70 },
+        skillBoost: ["mammonite", "hammer", "cart", "แมมโม", "ค้อน", "ทุบ", "รถเข็น", "boost"],
+        skills: ["แม็กซ์สกิลทุบหลัก (Mammonite/Cart)", "บั๊ฟอาวุธ/Adrenaline Rush", "สกิลเงิน/ลดค่าใช้จ่ายเสริม"],
+        gear: ["ขวาน/ค้อน ATK สูง", "เพิ่ม STR/DEX", "เจาะ DEF"],
+        cards: ["การ์ด STR/ATK", "เจาะ DEF", "ดาเมจต่อเผ่า/ขนาด"],
+        gems: ["จิตนักสู้ — ตัวคูณสกิลช่างตีเหล็กสูงมาก ATK% + เจาะ DEF คุ้มสุด"] },
+      { name: "ออโต้คริ (ASPD)", statOrder: ["AGI", "STR", "LUK", "DEX"], targets: { AGI: 120, STR: 100, LUK: 70 },
+        skillBoost: ["adrenaline", "weapon perfection", "power", "aspd", "คริ", "ความเร็ว"],
+        skills: ["Adrenaline Rush + บั๊ฟ ASPD", "พาสซีฟความชำนาญอาวุธ", "สกิลทุบเสริมตอนบั๊ฟหมด"],
+        gear: ["อาวุธ ASPD/คริ", "เพิ่ม AGI/LUK", "ASPD ให้ถึงเพดาน"],
+        cards: ["การ์ด AGI/คริ", "ASPD", "ดาเมจต่อเผ่า"],
+        gems: ["Sharp — สายออโต้คริของสมิธ (สายรองแต่เล่นได้)", "คริไม่ถึงใช้จิตนักสู้ก่อน"] },
+    ],
+  },
+  {
+    // Alchemist / Creator / Genetic — bottles/acid scale ATK (+INT), homun is support
+    match: ["alchemist", "อัลเคมิสต์", "อเคมิส", "creator", "genetic"],
+    variants: [
+      { name: "สายขวด/กรด", statOrder: ["STR", "INT", "DEX", "VIT"], targets: { STR: 110, INT: 90, DEX: 80 },
+        skillBoost: ["ขวด", "กรด", "acid", "bottle", "demonstration", "ขว้าง"],
+        skills: ["แม็กซ์ขว้างขวดไฟ/กรดกัดกร่อน", "ปกป้องอาวุธ-เกราะเคมีช่วยทีม", "เสริมพลังชีวิต/ยาเอาตัวรอด"],
+        gear: ["อาวุธ ATK + เพิ่ม INT (กรดสเกลคู่)", "เพิ่ม STR/DEX", "ลดดาเมจรับ"],
+        cards: ["การ์ด STR/INT", "ดาเมจต่อเผ่า", "VIT/ต้านสถานะ"],
+        gems: ["จิตนักสู้ — สายขว้างสเกล ATK เป็นหลัก (เช็คสเกลสกิลหลักของแพตช์ก่อนลงเยอะ)"] },
+      { name: "ซัพยา/โฮมุนคูลุส", statOrder: ["INT", "VIT", "DEX", "STR"], targets: { INT: 110, VIT: 90, DEX: 70 },
+        skillBoost: ["ฟิลิร์", "โฮมุน", "homunculus", "ยา", "potion", "heal", "ชีวิต"],
+        skills: ["แม็กซ์อัญเชิญฟิลิร์ + สกิลโฮมุน", "ขว้างยาชีวิต/เสริมพลังชีวิต", "ปกป้องอาวุธ-เกราะเคมี"],
+        gear: ["เพิ่ม INT (พลังฮีลยา)", "VIT/Max HP", "ลดเวลาร่าย"],
+        cards: ["การ์ด INT/SP", "VIT/HP%", "ต้านสถานะ"],
+        gems: ["ชิ้นเกราะ: เม็ดสายป้องกัน/VIT — ตัวซัพเน้นยืนรอด", "ช่องบู๊ลง Magic ได้ถ้าฮีล/ยาสเกล MATK"] },
+    ],
+  },
+  {
+    // Bard / Clown / Minstrel
+    match: ["bard", "บาร์ด", "clown", "คลาวน์", "minstrel"],
+    variants: [
+      { name: "ซัพเพลง (Support)", statOrder: ["INT", "DEX", "VIT", "AGI"], targets: { INT: 100, DEX: 90, VIT: 90 },
+        skillBoost: ["เพลง", "กวี", "บทกวี", "อีดุน", "บราคี", "กล่อม", "คืนชีพ", "song", "poem", "bragi"],
+        skills: ["แม็กซ์บทกวีของบราคี/แอปเปิลแห่งอีดุน", "เชี่ยวชาญเครื่องดนตรี + เพลงกดศัตรู", "บทเพลงคืนชีพช่วยทีม"],
+        gear: ["เครื่องดนตรีดีๆ + เพิ่ม INT/DEX", "VIT/Max HP ยืนกลางทีม", "ลดดาเมจรับ"],
+        cards: ["การ์ด INT/VIT", "ต้านสถานะ", "ลดดาเมจ"],
+        gems: ["เพลงไม่สเกลดาเมจ — ชิ้นเกราะลงเม็ดสายป้องกัน/VIT ยืนให้รอดคือหน้าที่หลัก",
+          "ฝั่ง TW มีเม็ดพิณดารา (星弦) เฉพาะสายเครื่องดนตรี — SEA ยังไม่เปิด"] },
+      { name: "ลูกผสมยิงธนู (ADL)", statOrder: ["AGI", "DEX", "LUK", "INT"], targets: { AGI: 110, DEX: 100, LUK: 70 },
+        skillBoost: ["โจมตีด้วยเครื่องดนตรี", "arrow", "vulture", "ธนู", "ยิง"],
+        skills: ["สกิลโจมตีด้วยเครื่องดนตรี/ธนู", "เพลงบั๊ฟตัวเองก่อนยิง", "เพลงคุมศัตรูเสริม"],
+        gear: ["ธนู/เครื่องดนตรี ATK สูง", "เพิ่ม AGI/DEX + คริ", "ASPD"],
+        cards: ["การ์ดดาเมจระยะไกล", "AGI/DEX", "คริ"],
+        gems: ["Sharp ถ้าเน้นออโต้คริ · จิตนักสู้ ถ้าปั่นสกิลโจมตีเป็นหลัก"] },
+    ],
+  },
+  {
+    // Dancer / Gypsy / Wanderer
+    match: ["dancer", "แดนเซอร์", "gypsy", "ยิปซี", "wanderer"],
+    variants: [
+      { name: "ซัพระบำ (Support)", statOrder: ["INT", "DEX", "VIT", "AGI"], targets: { INT: 100, DEX: 90, VIT: 90 },
+        skillBoost: ["ระบำ", "เต้น", "รับใช้", "อย่าลืมฉัน", "จุมพิต", "ฮัมเพลง", "คืนชีพ", "dance", "service"],
+        skills: ["แม็กซ์รับใช้คุณ/อย่าลืมฉัน (บั๊ฟทีม)", "ระบำกดศัตรู + จุมพิตเทพี", "บทเพลงคืนชีพช่วยทีม"],
+        gear: ["แส้ดีๆ + เพิ่ม INT/DEX", "VIT/Max HP ยืนกลางทีม", "ลดดาเมจรับ"],
+        cards: ["การ์ด INT/VIT", "ต้านสถานะ", "ลดดาเมจ"],
+        gems: ["ระบำไม่สเกลดาเมจ — ชิ้นเกราะลงเม็ดสายป้องกัน/VIT",
+          "ฝั่ง TW มีเม็ดพิณดารา (星弦) สายเครื่องดนตรี — SEA ยังไม่เปิด"] },
+      { name: "สายสกิลแส้ (ขว้างลูกศร)", statOrder: ["DEX", "AGI", "LUK", "INT"], targets: { DEX: 110, AGI: 100, LUK: 60 },
+        skillBoost: ["ขว้างลูกศรพันแส้", "แส้", "arrow", "whip", "ยิง"],
+        skills: ["แม็กซ์ขว้างลูกศรพันแส้", "ระบำบั๊ฟตัวเองก่อนตี", "ระบำคุมศัตรูเสริม"],
+        gear: ["แส้ ATK สูง", "เพิ่ม DEX/AGI + คริ", "ASPD"],
+        cards: ["การ์ดดาเมจระยะไกล", "DEX/AGI", "คริ"],
+        gems: ["จิตนักสู้ สายสกิลขว้าง · Sharp ถ้าเล่นออโต้คริ"] },
+    ],
+  },
+  {
+    // Sage / Scholar / Sorcerer
+    match: ["sage", "เซจ", "scholar", "สกอลาร์", "sorcerer", "ซอเซอเรอร์"],
+    variants: [
+      { name: "สายเวท (Bolt/Land)", statOrder: ["INT", "DEX", "VIT", "LUK"], targets: { INT: 120, DEX: 90, VIT: 60 },
+        skillBoost: ["bolt", "โบลต์", "land", "deluge", "volcano", "violent", "gale", "ธาตุ"],
+        skills: ["แม็กซ์โบลต์/สนามธาตุที่ใช้หลัก", "สกิลเปลี่ยนธาตุ/ดูดเวทช่วยทีม", "ลดเวลาร่าย + ฟื้น SP"],
+        gear: ["MATK/INT สูง", "ลดเวลาร่าย (VCT)", "เพิ่ม SP"],
+        cards: ["การ์ด MATK/INT", "ดาเมจตามธาตุ", "ลดเวลาร่าย/SP"],
+        gems: ["Magic Gem ยกเซต — MATK% + ลดร่ายผันแปร", "โดนรุมบ่อย (PVP) สลับเกราะเป็นเม็ดสายป้องกัน"] },
+    ],
+  },
+  {
+    // Druid / Karnos / Alitea (TW line) — shapeshift melee vs nature caster
+    match: ["druid", "ดรูอิด", "karnos", "คาร์นอส", "alitea", "อลิเทีย"],
+    variants: [
+      { name: "แปลงร่างสัตว์ (กรงเล็บ)", statOrder: ["STR", "AGI", "VIT", "DEX"], targets: { STR: 110, AGI: 100, VIT: 70 },
+        skillBoost: ["กรงเล็บ", "ขย้ำ", "ตะปบ", "สับเฉือน", "จ่าฝูง", "เถื่อน", "สัตว์ร้าย", "แปลงร่าง"],
+        skills: ["แม็กซ์แปลงร่างสัตว์ร้าย + สกิลกรงเล็บหลัก", "พลังชีวิตธรรมชาติ/โล่ธรรมชาติกันตาย", "สกิลจ่าฝูง/โทสะปิดท้าย"],
+        gear: ["อาวุธ ATK สูง + เพิ่ม STR/AGI", "Max HP/ลดดาเมจ (ต้องเข้าประชิด)", "ASPD/คริตามสาย"],
+        cards: ["การ์ด STR/ATK", "คริ/ASPD", "HP%/ลดดาเมจ"],
+        gems: ["จิตนักสู้ สายสกิลกรงเล็บ · Sharp ถ้าบิลด์คริ/ออโต้", "เกราะลงเม็ดป้องกันได้เพราะยืนประชิด"] },
+      { name: "เวทธรรมชาติ/ปักษา", statOrder: ["INT", "DEX", "VIT", "AGI"], targets: { INT: 120, DEX: 90, VIT: 60 },
+        skillBoost: ["พายุ", "ทอร์นาโด", "โทเทม", "น้ำแข็ง", "อสุนี", "ปฐพี", "ขนนก", "ปักษา", "วายุ", "บุปผา"],
+        skills: ["แม็กซ์เวทธรรมชาติหลัก (พายุ/โทเทม/ประจุอสุนี)", "ร่างปักษายิงขนนก/ทวนขนนก", "โล่แห่งธรรมชาติ/สัจธรรมเสริม"],
+        gear: ["MATK/INT สูง", "ลดเวลาร่าย", "เพิ่ม SP"],
+        cards: ["การ์ด MATK/INT", "ดาเมจตามธาตุ", "ลดเวลาร่าย/SP"],
+        gems: ["Magic Gem ยกเซต — สายเวทธรรมชาติกิน MATK% + ลดร่ายตรงตัว"] },
     ],
   },
 ];
@@ -536,6 +709,47 @@ function pickVariants(jobName: string): Variant[] {
   const n = (jobName || "").toLowerCase();
   const hit = VARIANT_SETS.find((v) => v.match.some((m) => n.includes(m)));
   return hit ? hit.variants : [];
+}
+
+/* ---- gem-set helpers shared by the guide chips and the per-slot picker ----
+ * Name-token matching against a build's rec text; Stellar (อัญมณีดารา) must
+ * match its FULL name or it would false-hit พิณดารา (Starstring). */
+const gemShortName = (g: GemDef) => g.th.replace(/^อัญมณี\s*/, "");
+function gemRecommended(g: GemDef, recText: string): boolean {
+  const tokens = g.id === 14135032
+    ? [g.th, g.en]
+    : [
+        g.th, g.en, gemShortName(g),
+        g.th.replace(/\s*Gem$/i, ""),
+        g.en.replace(/\s*Gem$/i, ""),
+      ].filter((s) => s.length >= 3);
+  return tokens.some((t) => recText.includes(t));
+}
+
+/* ---- every socketable gem set, as icon chips under the build guide ----
+ * Any class can socket any gem, so the grid always shows the full catalog;
+ * the ones named by the build's rec text get the gold "แนะนำ" border and are
+ * sorted to the front. */
+function GemChips({ recText }: { recText: string }) {
+  const gems = [...GEM_DEFS].sort(
+    (a, b) => Number(gemRecommended(b, recText)) - Number(gemRecommended(a, recText)));
+  return (
+    <View style={styles.gemGrid}>
+      {gems.map((g) => {
+        const on = gemRecommended(g, recText);
+        return (
+          <View key={g.id} style={styles.gemCell}>
+            <View style={[styles.gemChip, on && styles.gemChipOn, g.group === "tw" && { opacity: 0.65 }]}>
+              <Image source={{ uri: gemIconUrl(g) }} style={styles.gemChipIcon} resizeMode="contain" />
+              <Text style={[styles.gemChipName, on && styles.gemChipNameOn]} numberOfLines={1}>
+                {gemShortName(g)}{g.group === "tw" ? " ·TW" : ""}
+              </Text>
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
 }
 
 /* ---- generic picker (items & cards) ---- */
@@ -1589,6 +1803,11 @@ export default function CharacterScreen() {
           <View style={styles.planDivider} />
           <Text style={styles.planKey}>การ์ด</Text>
           {(activeVariant?.cards ?? preset.cards).map((t, i) => <Text key={i} style={styles.planItem}>• {t}</Text>)}
+          <View style={styles.planDivider} />
+          <Text style={styles.planKey}>อัญมณี (Gems){activeVariant?.gems ? " · " + activeVariant.name : ""}</Text>
+          {(activeVariant?.gems ?? preset.gems).map((t, i) => <Text key={i} style={styles.planItem}>• {t}</Text>)}
+          <GemChips recText={(activeVariant?.gems ?? preset.gems).join(" ")} />
+          <Text style={styles.planMini}>ขอบทอง = แนะนำสำหรับสายนี้ · เอฟเฟกต์/แหล่งที่มาเต็มๆ อยู่ในแท็บ Gems</Text>
           {!build.job && <Text style={styles.planHint}>เลือกอาชีพด้านบนเพื่อดูแผนของสายนั้นโดยเฉพาะ</Text>}
         </View>
 
@@ -1787,6 +2006,7 @@ export default function CharacterScreen() {
           onClose={() => setAffixSlot(null)}
         />
       )}
+
     </View>
   );
 }
@@ -2030,4 +2250,15 @@ const styles = StyleSheet.create({
   jobName: { color: "#41506B", fontSize: 13, fontWeight: "bold", flex: 1 },
   closeBtn: { backgroundColor: "#6E83E8", paddingVertical: 14, borderRadius: 12, alignItems: "center", marginTop: 8 },
   closeText: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold" },
+
+  // full gem-set chip grid in the build guide (4 per row)
+  gemGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: 8 },
+  gemCell: { width: "25%", padding: 3 },
+  gemChip: { alignItems: "center", backgroundColor: "#F1F6FC", borderRadius: 10,
+    borderWidth: 1.5, borderColor: "#DCE6F4", paddingVertical: 6, paddingHorizontal: 2 },
+  gemChipOn: { borderColor: "#E8B339", backgroundColor: "#FFF8E6" },
+  gemChipIcon: { width: 34, height: 34 },
+  gemChipName: { color: "#5A6781", fontSize: 9, fontWeight: "700", marginTop: 3 },
+  gemChipNameOn: { color: "#8A6D1F" },
+
 });
