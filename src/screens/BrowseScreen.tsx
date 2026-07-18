@@ -10,6 +10,15 @@ import {
 
 const LOCALES = ["en-US", "th-TH", "zh-TW"];
 const Q_FILTERS = [6, 5, 4, 3, 2];
+// Rune ember color (1-5). In-game a rune's color is player-chosen, so the Runes
+// tab lets you recolor every rune icon; hexes mirror the site's elementColor().
+const RUNE_COLORS = [
+  { id: 1, hex: "#63B85C" },
+  { id: 2, hex: "#B08968" },
+  { id: 3, hex: "#3BA9FF" },
+  { id: 4, hex: "#F87171" },
+  { id: 5, hex: "#FBBF24" },
+];
 
 function Row({ item, iconUrl, onPress }: { item: NormItem; iconUrl: string | null; onPress: () => void }) {
   const q = qualityInfo(item.quality);
@@ -126,6 +135,34 @@ function DetailModal({ item, iconUrl, locale, jobNames, onClose }: {
                 ))}
               </View>
             )}
+            {(item.conditions || []).length > 0 && (
+              <View style={styles.detailTable}>
+                <Text style={styles.refineHead}>{L("โบนัสตามเลเวลเสริมพลัง", "Refine bonuses")}</Text>
+                {(item.conditions || []).map((line, i) => (
+                  <Text key={i} style={styles.condLine}>{line}</Text>
+                ))}
+              </View>
+            )}
+            {(item.sets || []).map((set, si) => (
+              <View key={si} style={styles.detailTable}>
+                <Text style={styles.refineHead}>
+                  {L("ชุดเซ็ต", "Set")}{set.name ? ` — ${set.name}` : ""}
+                </Text>
+                {set.components.length > 0 && (
+                  <Text style={styles.setComponents}>
+                    {L("ชิ้นส่วน", "Pieces")}: {set.components.join(", ")}
+                  </Text>
+                )}
+                {set.effects.map((e, i) => (
+                  <View key={i} style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>
+                      {e.count > 0 ? L(`${e.count} ชิ้น`, `${e.count} pcs`) : ""}
+                    </Text>
+                    <Text style={styles.detailValue}>{e.desc}</Text>
+                  </View>
+                ))}
+              </View>
+            ))}
             {item.story ? <Text style={styles.story}>{item.story}</Text> : null}
           </ScrollView>
           <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
@@ -180,6 +217,8 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
   const [levelFilter, setLevelFilter] = useState<string | null>(null);
   const [detail, setDetail] = useState<NormItem | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [runeColor, setRuneColor] = useState(5);   // rune ember color (1-5)
+  const isRunes = kind === "runes";
 
   const hasQuality = KIND_HAS_QUALITY[kind];
   // level-range filter (monsters carry tags.level)
@@ -264,9 +303,16 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
     return m;
   }, [jobs]);
 
+  // rune-type icons carry a base ember name; recolor them with the chosen color
+  const iconFor = useCallback((it: NormItem) =>
+    it.emberIcon
+      ? resolveIconUrl({ ...it, iconUrl: `ember/${it.emberIcon}_${runeColor}.webp` }, iconPaths)
+      : resolveIconUrl(it, iconPaths),
+    [iconPaths, runeColor]);
+
   const renderItem = useCallback(({ item }: { item: NormItem }) => (
-    <Row item={item} iconUrl={resolveIconUrl(item, iconPaths)} onPress={() => setDetail(item)} />
-  ), [iconPaths]);
+    <Row item={item} iconUrl={iconFor(item)} onPress={() => setDetail(item)} />
+  ), [iconFor]);
 
   return (
     <View style={styles.container}>
@@ -283,6 +329,17 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
 
       <TextInput style={styles.search} placeholder="ค้นหาชื่อ/ความสามารถ เช่น กันสตัน ป้องกันไฟ"
         placeholderTextColor="#6B7079" value={query} onChangeText={setQuery} />
+
+      {isRunes && (
+        <View style={styles.runeColorRow}>
+          <Text style={styles.runeColorLabel}>{locale === "th-TH" ? "สีรูน" : "Rune color"}</Text>
+          {RUNE_COLORS.map((c) => (
+            <TouchableOpacity key={c.id} onPress={() => setRuneColor(c.id)}
+              style={[styles.colorDot, { backgroundColor: c.hex },
+                runeColor === c.id && styles.colorDotOn]} />
+          ))}
+        </View>
+      )}
 
       {(slotChips.length > 1 || subtypeChips.length > 1 || hasQuality) && (
         <TouchableOpacity style={styles.filterToggle} activeOpacity={0.7}
@@ -404,7 +461,7 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
       {detail && (
         <DetailModal
           item={detail}
-          iconUrl={resolveIconUrl(detail, iconPaths)}
+          iconUrl={iconFor(detail)}
           locale={locale}
           jobNames={jobNames}
           onClose={() => setDetail(null)}
@@ -446,6 +503,11 @@ const styles = StyleSheet.create({
   fText: { color: "#5A6781", fontSize: 13, fontWeight: "bold", lineHeight: 20, includeFontPadding: true },
   fTextOn: { color: "#FFFFFF", fontWeight: "bold" },
   count: { color: "#8A97AD", fontSize: 12, marginLeft: 18, marginVertical: 4 },
+  runeColorRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 18, marginTop: 12 },
+  runeColorLabel: { color: "#5A6781", fontSize: 13, fontWeight: "bold", marginRight: 10 },
+  colorDot: { width: 26, height: 26, borderRadius: 999, marginRight: 8,
+    borderWidth: 2, borderColor: "transparent" },
+  colorDotOn: { borderColor: "#41506B" },
   sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     backgroundColor: "#E8F2FD", paddingHorizontal: 18, paddingTop: 12, paddingBottom: 6 },
   sectionTitle: { color: "#5566C7", fontSize: 15, fontWeight: "bold" },
@@ -495,6 +557,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#E6EDF7" },
   detailLabel: { color: "#8A97AD", fontSize: 13, flex: 1 },
   detailValue: { color: "#41506B", fontSize: 13, fontWeight: "bold", textAlign: "right", flex: 1 },
+  condLine: { color: "#5A6B8C", fontSize: 13, paddingVertical: 5,
+    borderBottomWidth: 1, borderBottomColor: "#E6EDF7", lineHeight: 19 },
+  setComponents: { color: "#8A97AD", fontSize: 12, paddingVertical: 6, lineHeight: 18 },
   story: { color: "#8A97AD", fontSize: 13, fontStyle: "italic", marginTop: 16, lineHeight: 20 },
   closeBtn: { marginTop: 16, backgroundColor: "#6E83E8", borderRadius: 10,
     paddingVertical: 12, alignItems: "center" },

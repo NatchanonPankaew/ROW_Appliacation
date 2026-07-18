@@ -27,6 +27,18 @@ const ELEMENT_ICON = {
   4: "icon_elementstone_fire_01",
 };
 
+// Gem (enchant stone) icons used by the Gems tab — mirrors GEM_DEFS in
+// roworlddb.ts. These live under /media/images/item/ but only appear inside
+// shop boxPreview blobs, so the generic collectors above never reach them.
+const GEM_ICONS = [
+  ...[1, 4, 5, 10, 11, 12, 13, 14, 15, 16, 22, 24, 25, 26].map(
+    (n) => "icon_item_enchantstone_" + String(n).padStart(2, "0")
+  ),
+  ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 26, 27, 28, 29, 30, 31, 33, 34, 35].map(
+    (n) => "icon_item_stone_" + String(n).padStart(2, "0")
+  ),
+];
+
 let iconPaths = {};
 
 // Returns the upstream image URL for an (iconName, iconUrl) pair, or null.
@@ -47,6 +59,24 @@ const add = (iconName, iconUrl) => {
   if (u && u.startsWith(ORIGIN)) urls.add(u);
 };
 
+// Equipment icons whose name isn't in icon_paths: the app requests a deterministic
+// path (folder = icon prefix, e.g. icon_weapon_* -> weapon/), but upstream is
+// inconsistent — a few legacy icons (icon_weapon_Dagger_*) actually live under
+// item/. So mirror by PROBING candidate folders upstream and saving to the exact
+// local path the app will ask for. localRel -> [candidate upstream URLs].
+const equipTasks = new Map();
+const EQUIP_FOLDERS = ["item", "weapon", "equip", "shadowequip", "helmet"];
+const addEquip = (icon) => {
+  if (!icon) return;
+  if (iconPaths[icon]) { add(icon); return; }         // resolves via icon_paths
+  const m = icon.match(/^icon_([a-z]+)/);
+  const local = (m ? m[1] : "item") + "/" + icon + ".webp";
+  const rel = "media/images/" + local;
+  if (equipTasks.has(rel)) return;
+  const folders = [...new Set([(m ? m[1] : "item"), ...EQUIP_FOLDERS])];
+  equipTasks.set(rel, folders.map((f) => BASE_IMG + f + "/" + icon + ".webp"));
+};
+
 async function readJSON(rel) {
   try {
     return JSON.parse(await readFile(join(DATA, rel), "utf8"));
@@ -58,14 +88,14 @@ async function readJSON(rel) {
 async function collect() {
   iconPaths = (await readJSON("skill-simulator/data/icon_paths.json")) || {};
 
+  for (const g of GEM_ICONS) add(undefined, "item/" + g + ".webp");
+
   for (const loc of LOCALES) {
     const cards = await readJSON(`card-simulator/data/handbook_cards_${loc}.json`);
     (cards?.cards || []).forEach((c) => add(c.item_icon));
 
     const equip = await readJSON(`equipment/data/equipment_${loc}.json`);
-    (equip?.items || []).forEach((it) =>
-      add(it.icon, it.icon ? "item/" + it.icon + ".webp" : undefined)
-    );
+    (equip?.items || []).forEach((it) => addEquip(it.icon));
 
     const pets = await readJSON(`pet/data/pet_library_${loc}.json`);
     (pets?.pets || []).forEach((p) => add(p.icon, p.iconUrl));
@@ -80,10 +110,29 @@ async function collect() {
     Object.values(runes?.baseItems || {}).forEach((r) =>
       add(r.icon || ELEMENT_ICON[r.element])
     );
+    // rune-type (ember) icons: /media/images/ember/<icon>_<color>.webp — mirror
+    // all 5 color variants since the Runes tab lets you recolor them (1-5).
+    Object.values(runes?.effectGroups || {}).forEach((g) => {
+      if (g?.icon) for (let c = 1; c <= 5; c++) add(undefined, `ember/${g.icon}_${c}.webp`);
+      else add(ELEMENT_ICON[g?.elementId]);
+    });
 
     const idx = await readJSON(`skill-simulator/data/skills_index_${loc}.json`);
     const jobs = idx?.jobs || idx || {};
     Object.values(jobs).forEach((j) => add(j?.job_icon));
+
+    // Equipment affixes (stunts): the stunt icons live in icon_paths, plus the
+    // weapon-type / equip-slot icons the affix browser & planner show.
+    const affixIdx = await readJSON(`affix-simulator/data/stunt_package_index_${loc}.json`);
+    Object.values(affixIdx?.weapon_types || {}).forEach((t) => add(t?.icon));
+    Object.values(affixIdx?.assembly_types || {}).forEach((t) => add(t?.icon));
+    const affixLib = await readJSON(`affix-simulator/data/stunt_skill_library_${loc}.json`);
+    Object.values(affixLib?.packages || {}).forEach((p) =>
+      (p?.entries || []).forEach((e) => {
+        const ic = (e?.stunt || e)?.icon;
+        add(ic, ic ? "item/" + ic + ".webp" : undefined); // Taiwan stunt icons aren't in icon_paths
+      })
+    );
 
     // per-job skill icons
     try {
@@ -91,7 +140,11 @@ async function collect() {
       for (const f of await readdir(dir)) {
         const d = JSON.parse(await readFile(join(dir, f), "utf8"));
         const job = d.job || d;
-        Object.values(job.skills || {}).forEach((s) => add(s?.icon));
+        // pass the skill/<icon>.webp fallback too: Taiwan-sourced skills (Bard/
+        // Dancer/Alchemist) aren't in icon_paths, so resolve() would miss them.
+        Object.values(job.skills || {}).forEach((s) =>
+          add(s?.icon, s?.icon ? "skill/" + s.icon + ".webp" : undefined)
+        );
       }
     } catch {
       /* no jobs dir for this locale */
@@ -131,6 +184,25 @@ async function download(url) {
   }
 }
 
+// Try each candidate upstream URL; save the first that exists to the fixed local
+// path (rel). Lets the app use one deterministic path despite upstream drift.
+async function downloadEquip(rel) {
+  const dest = join(PUBLIC, rel);
+  if (await exists(dest)) { skipCount++; return; }
+  for (const url of equipTasks.get(rel)) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const buf = Buffer.from(await res.arrayBuffer());
+      await mkdir(dirname(dest), { recursive: true });
+      await writeFile(dest, buf);
+      okCount++;
+      return;
+    } catch { /* try next candidate */ }
+  }
+  failCount++;
+}
+
 async function pool(items, size, fn) {
   const queue = [...items];
   let done = 0;
@@ -156,6 +228,8 @@ async function main() {
   console.log("Unique images referenced: " + urls.size + "\n");
   console.log("Downloading -> public/media/images (skips 404 + already-cached)");
   await pool([...urls], 16, download);
+  console.log(`Equipment icons (probe candidate folders): ${equipTasks.size}`);
+  await pool([...equipTasks.keys()], 16, downloadEquip);
   console.log(`\nDone. ${okCount} downloaded, ${skipCount} cached, ${failCount} failed/missing.`);
 }
 

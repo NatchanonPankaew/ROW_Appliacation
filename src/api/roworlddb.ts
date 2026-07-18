@@ -16,7 +16,9 @@ export type Kind =
   | "shop"
   | "maps"
   | "apocalypse"
-  | "runes";
+  | "runes"
+  | "affix"
+  | "gems";
 
 export interface DetailRow { label: string; value: string; }
 export interface FilterDef { key: string; label: string; options: string[]; }
@@ -46,8 +48,23 @@ export interface NormItem {
   jobLimits?: number[];      // job ids that can use this item ([] when jobAll)
   jobAll?: boolean;          // usable by every job
   subtypeName?: string;      // weapon/armor subtype label (e.g. "ดาบสองมือ")
+  subtypeCode?: number;      // raw itemSubtype code (weapon types line up with affix weapon_types 7001+)
   twoHanded?: boolean;       // weapon occupies the off-hand slot too
   reqLevel?: number;         // level required to equip (from openLevel)
+  // conditional bonuses (mostly refine-threshold lines, e.g. "+10 Max HP +3%")
+  conditions?: string[];
+  // rune type: base ember icon name; the color (1-5) is chosen in the UI and
+  // appended -> /media/images/ember/<emberIcon>_<color>.webp
+  emberIcon?: string;
+  // set/suit effects this item belongs to
+  sets?: EquipSet[];
+}
+
+// A gear set: which pieces make it up and what each piece-count threshold grants.
+export interface EquipSet {
+  name: string;
+  components: string[];                       // localized component item names
+  effects: { count: number; desc: string }[]; // e.g. { count: 3, desc: "HP +200" }
 }
 
 export interface JobOpt { id: number; name: string; icon?: string; }
@@ -125,7 +142,8 @@ export const LOCALES = ["en-US", "th-TH", "zh-TW"];
 
 export const KIND_HAS_QUALITY: Record<Kind, boolean> = {
   character: false,
-  cards: true, equipment: true, pets: true, shop: true, runes: true,
+  cards: true, equipment: true, pets: true, shop: true, runes: true, affix: true,
+  gems: true,
   monsters: false, skills: false, maps: false, apocalypse: false,
 };
 
@@ -265,6 +283,17 @@ const ITEM_TYPE_SLOT: Record<number, string> = {
 
 function stripColorTags(s: any): string {
   return String(s || "").replace(/<color[^>]*>/gi, "").replace(/<\/color>/gi, "");
+}
+
+// Equipment icon -> /media/images/<folder>/<icon>.webp fallback (used when the
+// icon isn't in icon_paths, e.g. Taiwan-sourced gear). The media subfolder is
+// encoded in the icon name prefix: icon_weapon_* -> weapon/, icon_equip_* ->
+// equip/, icon_shadowequip_* -> shadowequip/, icon_helmet_* -> helmet/, else item/.
+function equipIconUrl(icon?: string): string | undefined {
+  if (!icon) return undefined;
+  const m = icon.match(/^icon_([a-z]+)/);
+  const folder = m ? m[1] : "item";
+  return folder + "/" + icon + ".webp";
 }
 
 function fmtNum(e: any): string {
@@ -439,6 +468,52 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
     const attrs = d.attributes || {};
     const types = d.itemTypes || {};
     const subs = d.itemSubtypes || {};
+    // in-file libraries that the item references by id — these hold the gear's
+    // actual "abilities": stunts (special skills), buffs (passives), fixedAffixes
+    // (fixed bonus lines). Resolve them so the detail view shows them.
+    const buffLib = d.buffs || {}, stuntLib = d.stunts || {}, affixLib = d.affixes || {};
+    const condLib = d.conditions || {};
+    // suits is an array; items reference a suit by its id (also listed in .ids),
+    // not by array index — build an id -> suit lookup.
+    const suitById = new Map<number, any>();
+    for (const s of (d.suits || [])) {
+      const ids = [s.id, ...(Array.isArray(s.ids) ? s.ids : [])];
+      for (const id of ids) if (id != null) suitById.set(Number(id), s);
+    }
+    // conditional bonus lines (mostly refine-threshold: "+10 Max HP +3%")
+    const resolveConditions = (it: any): string[] =>
+      (it.conditions || [])
+        .map((id: any) => { const c = condLib[id] || condLib[String(id)]; return c && (c.text || c.name); })
+        .filter(Boolean)
+        .map(stripColorTags);
+    // set effects: name, member pieces, and per-piece-count bonuses
+    const resolveSets = (it: any): EquipSet[] =>
+      (it.suits || [])
+        .map((id: any) => suitById.get(Number(id)))
+        .filter(Boolean)
+        .map((s: any) => ({
+          name: stripColorTags(s.name),
+          components: (s.components || []).map((c: any) => stripColorTags(c.name)).filter(Boolean),
+          effects: (s.effects || [])
+            .map((e: any) => ({ count: Number(e.num) || 0, desc: stripColorTags(e.desc) }))
+            .filter((e: any) => e.desc),
+        }));
+    const resolveAbilities = (it: any): string[] => {
+      const out: string[] = [];
+      (it.stunts || []).forEach((id: any) => {
+        const s = stuntLib[id] || stuntLib[String(id)];
+        if (s && s.name) out.push(stripColorTags(s.name) + (s.desc ? ": " + stripColorTags(s.desc) : ""));
+      });
+      (it.buffs || []).forEach((id: any) => {
+        const b = buffLib[id] || buffLib[String(id)];
+        if (b && (b.name || b.desc)) out.push([stripColorTags(b.name), stripColorTags(b.desc)].filter(Boolean).join(": "));
+      });
+      (it.fixedAffixes || []).forEach((id: any) => {
+        const a = affixLib[id] || affixLib[String(id)];
+        if (a && a.text) out.push(stripColorTags(a.text));
+      });
+      return out;
+    };
     items = (d.items || []).map((it: any) => {
       // real schema: it.itemType (numeric) is the slot; name is in itemTypes[itemType].name
       const slotKey = ITEM_TYPE_SLOT[Number(it.itemType)] || "other";
@@ -455,10 +530,10 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
         id: it.id,
         title: stripColorTags(it.name),
         subtitle: slot || (it.openLevel ? "Lv." + it.openLevel : undefined),
-        effects: it.desc ? [stripColorTags(it.desc)] : [],
+        effects: [it.desc ? stripColorTags(it.desc) : "", ...resolveAbilities(it)].filter(Boolean),
         iconName: it.icon,
-        // equipment icons live under /media/images/item/<icon>.webp when not in icon_paths
-        iconUrl: it.icon ? "item/" + it.icon + ".webp" : undefined,
+        // fallback path when the icon isn't in icon_paths (Taiwan-sourced gear)
+        iconUrl: equipIconUrl(it.icon),
         quality: it.quality,
         details,
         stats: numeric,
@@ -468,8 +543,11 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
         jobLimits: Array.isArray(it.jobLimits) ? it.jobLimits.map(Number) : [],
         jobAll: !!it.jobAll,
         subtypeName,
+        subtypeCode: it.itemSubtype != null ? Number(it.itemSubtype) : undefined,
         twoHanded,
         reqLevel: it.openLevel ? Number(it.openLevel) : undefined,
+        conditions: resolveConditions(it),
+        sets: resolveSets(it),
         tags: {
           quality: qualityTag(it.quality),
           slot: slot || "",
@@ -688,6 +766,23 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
     const elements = d.elements || {};
     const packages = d.effectPackages || {};   // pkgId -> [{ effectId, needLevel, weight }]
     const configs = d.effectConfigs || {};      // effectId -> { name, desc, level, color }
+    const affixRanges = d.affixRanges || {};    // attrId -> { libId -> { min, max } }
+    const runeAttrs = d.attributes || {};       // attrId -> { showName, percentageShow }
+    // the stat lines a rune can roll (its concrete "ability"), from affixesLibrary.
+    const runeAffixLines = (libId: any): DetailRow[] => {
+      const out: DetailRow[] = [];
+      const lib = String(libId);
+      for (const attrId of Object.keys(affixRanges)) {
+        const rng = affixRanges[attrId][lib];
+        if (!rng) continue;
+        const a = runeAttrs[attrId] || runeAttrs[String(attrId)] || {};
+        const pct = a.percentageShow ? "%" : "";
+        const min = Number(rng.min), max = Number(rng.max);
+        const val = "+" + (min === max ? min : min + "~" + max) + pct;
+        out.push({ label: stripColorTags(a.showName || ("Attr " + attrId)), value: val });
+      }
+      return out;
+    };
     // rune baseItems carry no icon field; map the element to its elemental-stone
     // icon (these keys exist in icon_paths.json). Lumina/holy has no stone icon.
     const ELEMENT_ICON: Record<number, string> = {
@@ -731,6 +826,11 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
           Array.from(new Set(byLevel[Number(lvl)])).forEach((line) => effects.push("• " + line));
         });
 
+      const details: DetailRow[] = [];
+      if (elName) details.push({ label: locale === "th-TH" ? "ธาตุ" : "Element", value: elName });
+      // the rune's rollable stats (its core ability — what it can grant)
+      details.push(...runeAffixLines(r.affixesLibrary));
+
       return {
         id: r.id,
         title: r.filterName || elName || String(r.id),
@@ -738,10 +838,41 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
         quality: r.quality,
         iconName: r.icon || ELEMENT_ICON[r.element] || undefined,
         effects,
-        details: elName ? [{ label: locale === "th-TH" ? "ธาตุ" : "Element", value: elName }] : [],
+        details,
+        slotKey: elName || undefined,   // group the rune list by element
+        slot: elName || undefined,
         tags: { quality: qualityTag(r.quality), element: elName || "" },
       };
     });
+
+    // Rune TYPES (ember effect groups) — the 33 selectable runes the planner
+    // offers, grouped by element, each with its 5 upgrade levels. baseItems above
+    // are the generic crystals; these are the actual named rune effects.
+    const th = locale === "th-TH";
+    const groups = d.effectGroups ? Object.values(d.effectGroups) : [];
+    for (const g of groups as any[]) {
+      const el = elements[g.elementId] || elements[String(g.elementId)];
+      const elName = (el && el.name) || undefined;
+      const levels = g.levels || {};
+      const effects = Object.keys(levels)
+        .sort((a, b) => Number(a) - Number(b))
+        .map((lv) => (th ? "เลเวล " : "Lv.") + lv + ": " + stripColorTags(levels[lv].desc));
+      items.push({
+        id: g.group,
+        title: stripColorTags(g.name),
+        subtitle: elName,
+        // ember icons live at /media/images/ember/<icon>_<color>.webp (not in
+        // icon_paths). Default color = elementId; the Runes tab lets you recolor.
+        iconName: g.icon ? undefined : ELEMENT_ICON[g.elementId] || undefined,
+        iconUrl: g.icon ? "ember/" + g.icon + "_" + g.elementId + ".webp" : undefined,
+        emberIcon: g.icon || undefined,
+        effects,
+        slotKey: elName || undefined,
+        slot: elName || undefined,
+        tags: { element: elName || "", kind: th ? "ประเภทรูน" : "Rune type" },
+      });
+    }
+
     const filters = [
       buildFilter("element", locale === "th-TH" ? "ธาตุ" : "Element", items),
       buildFilter("quality", locale === "th-TH" ? "คุณภาพ" : "Quality", items),
@@ -749,7 +880,416 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
     return { items, filters };
   }
 
+  if (kind === "affix") {
+    const data = await fetchAffixData(locale);
+    const index = await fetchSkillIndex(locale).catch(() => ({} as Record<number, JobNode>));
+    const th = locale === "th-TH";
+
+    // every stunt id available on a weapon type / armor slot — combining BOTH the
+    // job-forge map AND the level-based packages (the latter is where the ~350
+    // "missing" affixes live), so the browse is complete.
+    const pkgStunts = (pids: number[]) => pids.flatMap((pid) => (data.packages[String(pid)] || []).map((s) => s.id));
+    const levelIds = (m: Record<string, Record<string, number[]>>, t: string) =>
+      Object.values(m[t] || {}).flatMap((pids) => pkgStunts(pids));
+
+    type Sec = { key: string; label: string; ids: number[] };
+    const secs: Sec[] = [];
+
+    // one section per CLASS: the affixes it can forge on the weapon types it uses
+    // (its own job-forge stunts + the type's level-based stunts).
+    const classTypes = new Map<number, Set<string>>();
+    Object.keys(data.weaponForge).forEach((t) =>
+      Object.keys(data.weaponForge[t] || {}).forEach((j) => {
+        const job = Number(j);
+        if (!classTypes.has(job)) classTypes.set(job, new Set());
+        classTypes.get(job)!.add(t);
+      })
+    );
+    [...classTypes.keys()].sort((a, b) => a - b).forEach((job) => {
+      const ids = new Set<number>();
+      classTypes.get(job)!.forEach((t) => {
+        (data.weaponForge[t]?.[String(job)] || []).forEach((i) => ids.add(i));
+        levelIds(data.index.weaponPkgByTypeLevel, t).forEach((i) => ids.add(i));
+      });
+      if (ids.size) secs.push({ key: "cls_" + job, label: stripColorTags(index[job]?.name) || ("Job " + job), ids: [...ids] });
+    });
+
+    // universal gear sections (armor / cape / accessory apply to every class)
+    const gear: [string, string, string][] = [["4", "เกราะ (ทุกอาชีพ)", "Armor (all jobs)"], ["7", "ผ้าคลุม (ทุกอาชีพ)", "Cape (all jobs)"], ["10", "เครื่องประดับ (ทุกอาชีพ)", "Accessory (all jobs)"]];
+    gear.forEach(([s, tl, el]) => {
+      const ids = new Set<number>();
+      Object.values(data.armorForge[s] || {}).forEach((arr) => arr.forEach((i) => ids.add(i)));
+      levelIds(data.index.armorPkgByTypeLevel, s).forEach((i) => ids.add(i));
+      if (ids.size) secs.push({ key: "gear_" + s, label: th ? tl : el, ids: [...ids] });
+    });
+
+    items = [];
+    for (const sec of secs) {
+      // collapse a stunt family's quality tiers + levels into one row within the section
+      const groups = new Map<string, { name: string; quality: number; icon?: string; levels: Map<number, string>; stats?: Record<string, number> }>();
+      for (const id of sec.ids) {
+        const st = data.stuntById[id];
+        if (!st) continue;
+        const key = st.name + "|" + st.quality;
+        let g = groups.get(key);
+        if (!g) { g = { name: st.name, quality: st.quality, icon: st.icon, levels: new Map() }; groups.set(key, g); }
+        if (!g.levels.has(st.level)) g.levels.set(st.level, st.desc);
+        if (st.stats && Object.keys(st.stats).length) g.stats = st.stats;
+      }
+      for (const g of groups.values()) {
+        const lvls = [...g.levels.keys()].sort((a, b) => a - b);
+        items.push({
+          id: sec.key + "|" + g.name + "|" + g.quality,
+          title: g.name,
+          subtitle: lvls.length > 1 ? (th ? lvls.length + " ระดับ" : lvls.length + " levels") : undefined,
+          quality: g.quality,
+          iconName: g.icon,
+          iconUrl: g.icon ? "item/" + g.icon + ".webp" : undefined,
+          effects: lvls.map((lv) => "Lv." + lv + ": " + g.levels.get(lv)),
+          stats: g.stats,
+          slotKey: sec.key,
+          slot: sec.label,
+          tags: { quality: qualityTag(g.quality), slot: sec.label },
+        } as NormItem);
+      }
+    }
+    items.sort((a, b) => (b.quality || 0) - (a.quality || 0) || a.title.localeCompare(b.title));
+    const filters = [
+      buildFilter("slot", th ? "อาชีพ" : "Class", items),
+      buildFilter("quality", th ? "คุณภาพ" : "Quality", items),
+    ].filter(Boolean) as FilterDef[];
+    return { items, filters };
+  }
+
+  if (kind === "gems") {
+    const th = locale === "th-TH";
+    const zh = locale === "zh-TW";
+
+    // Gem sources: scan the shop dataset for boxes/items that contain each gem
+    // (roworlddb has no gem dataset, but the shop boxPreview lists them), so the
+    // "ได้จาก" lines stay true to the current SEA shop without hand-upkeep.
+    const srcByGem = new Map<number, Map<string, Set<string>>>(); // gem -> box name -> stores
+    try {
+      const shop = await getJSON(BASE_DATA + "/shop/data/shop_" + locale + ".json");
+      for (const si of shop?.items || []) {
+        const inBox = (si?.boxPreview?.contents || []) as any[];
+        const direct = GEM_DEFS.some((g) => g.id === Number(si?.itemId)) ? [si] : [];
+        for (const c of [...inBox, ...direct]) {
+          const gid = Number(c.itemId);
+          if (!GEM_DEFS.some((g) => g.id === gid)) continue;
+          const box = c === si ? (th ? "ขายตรง" : "Direct sale") : String(si.name || "?");
+          let m = srcByGem.get(gid);
+          if (!m) { m = new Map(); srcByGem.set(gid, m); }
+          if (!m.has(box)) m.set(box, new Set());
+          if (si.storeName) m.get(box)!.add(String(si.storeName));
+        }
+      }
+    } catch { /* shop data unavailable — sources are optional */ }
+
+    const groupLabel: Record<GemGroup, string> = {
+      info: th ? "วิธีเอนแชนท์" : "How enchanting works",
+      stat: th ? "อัญมณีสเตตัส" : "Stat gems",
+      basic: th ? "อัญมณีทั่วไป" : "Basic gems",
+      set: th ? "อัญมณีเซตพิเศษ" : "Set gems",
+      tw: th ? "เฉพาะเซิร์ฟไต้หวัน" : "Taiwan-only",
+    };
+
+    // pseudo-item explaining the enchant system (mechanics from the TW guide;
+    // numbers per gem level aren't in any dataset, so none are invented here)
+    items = [{
+      id: "gem_howto",
+      title: th ? "ระบบเอนแชนท์อัญมณี (Gems)" : "Gem enchant system",
+      subtitle: th ? "กติกาหลักก่อนลงเม็ด" : "Core rules",
+      iconUrl: "item/icon_item_stone_07.webp",
+      effects: th ? [
+        "อุปกรณ์เอนแชนท์ได้ 7 ชิ้น: อาวุธ/เกราะ/มือรอง/ผ้าคลุม/รองเท้า/เครื่องประดับซ้าย-ขวา",
+        "ชิ้นละ 3 รู (อาวุธสองมือ 4 รู) — เม็ดชื่อเดียวกันใส่ได้ชิ้นละ 1 เม็ดเท่านั้น",
+        "เซ็ต = สูตรเม็ดเฉพาะชุด ต้องใส่ตรงสูตร 100% ถึงเปิดโบนัส — เม็ดนอกสูตรทำให้เซ็ตไม่ทำงาน",
+        "เลเวลเซ็ต = เลเวลเม็ดที่ต่ำสุดในชิ้นนั้น (อัปทุกเม็ดให้เท่ากันคุ้มกว่าเม็ดสูงเม็ดเดียว)",
+        "อัปเกรด: 3 เม็ดเลเวลต่ำ → 1 เม็ดเลเวลถัดไป · ถอดออกเม็ดจะแตกกลับเป็น Lv.1 ไม่สูญ",
+        "ซื้อเม็ดพื้นฐาน: กระเป๋า → แลกเปลี่ยน → สมาคมพ่อค้า → อัญมณี",
+        "แนวทางลงทุน: เล่นฟรีหยุด Lv.1-2 · สายทั่วไปหยุด Lv.3 (คุ้มสุด) · สายหนักค่อยดัน Lv.5+",
+        "ทดลองจัดสูตรต่อชิ้นได้ในแท็บ Set Gems",
+      ] : [
+        "7 enchantable pieces: weapon/armor/off-hand/cape/shoes/accessory L+R",
+        "3 sockets per piece (two-handed weapons: 4) — only ONE stone of the same name per piece",
+        "A set is a specific stone recipe; it activates only on a 100% match — off-recipe stones break it",
+        "Set level = the lowest gem level on that piece (level them evenly)",
+        "Upgrade: 3 low-level gems → 1 of the next level · removing splits back to Lv.1 losslessly",
+        "Buy basics: Bag → Transaction → Chamber of Commerce → Gem",
+        "Investment: F2P stop at Lv.1-2 · most players stop at Lv.3 (best value) · whales push Lv.5+",
+      ],
+      slotKey: "gem_info", slot: groupLabel.info,
+      tags: { slot: groupLabel.info },
+    }];
+
+    for (const g of GEM_DEFS) {
+      const effects = (th ? g.thFx : g.enFx).slice();
+      const details: DetailRow[] = [];
+      const src = srcByGem.get(g.id);
+      if (src) {
+        for (const [box, stores] of src) {
+          details.push({
+            label: (th ? "ได้จาก: " : "From: ") + box,
+            value: [...stores].join(", ") || "-",
+          });
+        }
+      } else if (g.group === "tw") {
+        details.push({
+          label: th ? "แหล่งที่มา" : "Source",
+          value: th ? "ยังไม่เปิดในเซิร์ฟ SEA (มีเฉพาะไต้หวัน)" : "Not yet on SEA (Taiwan only)",
+        });
+      }
+      items.push({
+        id: g.id,
+        title: zh ? g.zh : th ? g.th : g.en,
+        subtitle: zh ? g.en : g.zh + " · " + (th ? g.en : g.th),
+        quality: g.quality,
+        iconUrl: "item/" + g.icon + ".webp",
+        effects,
+        details,
+        slotKey: "gem_" + g.group, slot: groupLabel[g.group],
+        tags: { slot: groupLabel[g.group], quality: qualityTag(g.quality) },
+      });
+    }
+
+    const filters = [
+      buildFilter("slot", th ? "หมวด" : "Group", items),
+      buildFilter("quality", th ? "คุณภาพ" : "Quality", items),
+    ].filter(Boolean) as FilterDef[];
+    return { items, filters };
+  }
+
   return { items: [], filters: [] };
+}
+
+/* =========================================================================
+ * Gems (enchant stones / 附魔石) — socketed into equipment for stat + set
+ * bonuses. roworlddb serves NO gem dataset, so this catalog is hand-built from
+ * the SEA shop data (names/icons/quality; th/en/zh names are the server's own
+ * localized strings) plus the tomchun.tw enchant guide for the documented set
+ * effects (จิตนักสู้/Sharp/Magic...). Per-level numbers are deliberately not
+ * listed anywhere — they are not in any public dataset; don't invent them.
+ * ========================================================================= */
+type GemGroup = "info" | "stat" | "basic" | "set" | "tw";
+export interface GemDef {
+  id: number;                 // in-game item id (14135xxx, from shop data)
+  th: string; en: string; zh: string;
+  icon: string;               // file under /media/images/item/
+  quality: number;            // 3 = shop basics (blue), 5 = set gems (gold)
+  group: Exclude<GemGroup, "info">;
+  thFx: string[]; enFx: string[];
+}
+
+// Full icon URL for a gem (chips outside the Browse list can't go through
+// resolveIconUrl, which needs a NormItem).
+export const gemIconUrl = (g: GemDef) => BASE_IMG + "item/" + g.icon + ".webp";
+
+const FX_UNKNOWN_TH = "ตัวเลขจริงยังไม่มีในฐานข้อมูลเปิด — เช็คในเกมก่อนลงทุน";
+const FX_UNKNOWN_EN = "Exact numbers aren't in any public dataset — verify in-game";
+
+export const GEM_DEFS: GemDef[] = [
+  // --- stat gems (Chamber of Commerce basics; +their stat, set boosts that line) ---
+  { id: 14135013, th: "STR Gem", en: "STR Gem", zh: "力量寶石", icon: "icon_item_enchantstone_11", quality: 3, group: "stat",
+    thFx: ["เพิ่ม STR ต่อเม็ด — สายตีกายภาพ (สเกลกับ STR)"], enFx: ["+STR per gem — physical builds"] },
+  { id: 14135014, th: "Magic Gem", en: "Magic Gem", zh: "魔力寶石", icon: "icon_item_enchantstone_13", quality: 3, group: "stat",
+    thFx: ["เพิ่มพลังเวทต่อเม็ด", "เซตมนตรา: MATK% + ลดเวลาร่ายผันแปร — เซตหลักของสายเวท/ฮีล (สำคัญกับสกิลร่ายนาน)"],
+    enFx: ["+magic per gem", "Magic set: MATK% + variable-cast reduction — the caster/healer staple"] },
+  { id: 14135015, th: "AGI Gem", en: "AGI Gem", zh: "敏捷寶石", icon: "icon_item_enchantstone_12", quality: 3, group: "stat",
+    thFx: ["เพิ่ม AGI ต่อเม็ด — สาย ASPD/หลบ"], enFx: ["+AGI per gem — ASPD/dodge builds"] },
+  { id: 14135016, th: "DEX Gem", en: "DEX Gem", zh: "靈巧寶石", icon: "icon_item_enchantstone_14", quality: 3, group: "stat",
+    thFx: ["เพิ่ม DEX ต่อเม็ด — สายแม่นยำ/ธนู/ลดร่าย"], enFx: ["+DEX per gem — hit/bow/cast builds"] },
+  { id: 14135017, th: "VIT Gem", en: "VIT Gem", zh: "體力寶石", icon: "icon_item_enchantstone_16", quality: 3, group: "stat",
+    thFx: ["เพิ่ม VIT ต่อเม็ด — สายอึด/แทงค์"], enFx: ["+VIT per gem — tank/survival builds"] },
+  { id: 14135018, th: "อัญมณี LUK", en: "LUK Gem", zh: "幸運寶石", icon: "icon_item_enchantstone_15", quality: 3, group: "stat",
+    thFx: ["เพิ่ม LUK ต่อเม็ด — สายคริ/นก"], enFx: ["+LUK per gem — crit/falcon builds"] },
+  // --- basic colored gems (same General Gem Chest; effects not in open data) ---
+  { id: 14135011, th: "Garnet", en: "Garnet", zh: "深紅寶石", icon: "icon_item_enchantstone_01", quality: 3, group: "basic",
+    thFx: ["อัญมณีพื้นฐานจากหีบอัญมณีทั่วไป", FX_UNKNOWN_TH], enFx: ["Basic gem from the General Gem Chest", FX_UNKNOWN_EN] },
+  { id: 14135012, th: "Zircon", en: "Zircon", zh: "青綠寶石", icon: "icon_item_enchantstone_10", quality: 3, group: "basic",
+    thFx: ["อัญมณีพื้นฐานจากหีบอัญมณีทั่วไป", FX_UNKNOWN_TH], enFx: ["Basic gem from the General Gem Chest", FX_UNKNOWN_EN] },
+  { id: 14135005, th: "Ruby", en: "Ruby", zh: "紅寶石", icon: "icon_item_enchantstone_05", quality: 3, group: "basic",
+    thFx: ["อัญมณีพื้นฐานจากหีบอัญมณีทั่วไป", FX_UNKNOWN_TH], enFx: ["Basic gem from the General Gem Chest", FX_UNKNOWN_EN] },
+  { id: 14135006, th: "Emerald", en: "Emerald", zh: "綠寶石", icon: "icon_item_enchantstone_04", quality: 3, group: "basic",
+    thFx: ["อัญมณีพื้นฐานจากหีบอัญมณีทั่วไป", FX_UNKNOWN_TH], enFx: ["Basic gem from the General Gem Chest", FX_UNKNOWN_EN] },
+  { id: 14135007, th: "Sobbing Starlight", en: "Sobbing Starlight", zh: "星淚石", icon: "icon_item_enchantstone_22", quality: 3, group: "basic",
+    thFx: ["อัญมณีพื้นฐานจากหีบอัญมณีทั่วไป", FX_UNKNOWN_TH], enFx: ["Basic gem from the General Gem Chest", FX_UNKNOWN_EN] },
+  { id: 14135008, th: "Peridot", en: "Peridot", zh: "橄欖石", icon: "icon_item_enchantstone_25", quality: 3, group: "basic",
+    thFx: ["อัญมณีพื้นฐานจากหีบอัญมณีทั่วไป", FX_UNKNOWN_TH], enFx: ["Basic gem from the General Gem Chest", FX_UNKNOWN_EN] },
+  { id: 14135009, th: "Cat's Eye", en: "Cat's Eye", zh: "貓眼石", icon: "icon_item_enchantstone_24", quality: 3, group: "basic",
+    thFx: ["อัญมณีพื้นฐานจากหีบอัญมณีทั่วไป", FX_UNKNOWN_TH], enFx: ["Basic gem from the General Gem Chest", FX_UNKNOWN_EN] },
+  { id: 14135010, th: "Rose Quartz", en: "Rose Quartz", zh: "玫瑰石英", icon: "icon_item_enchantstone_26", quality: 3, group: "basic",
+    thFx: ["อัญมณีพื้นฐานจากหีบอัญมณีทั่วไป", FX_UNKNOWN_TH], enFx: ["Basic gem from the General Gem Chest", FX_UNKNOWN_EN] },
+  // --- set gems (gold; the three documented meta sets first) ---
+  { id: 14135025, th: "อัญมณีจิตนักสู้", en: "Battle Will Gem", zh: "鬥志寶石", icon: "icon_item_stone_07", quality: 5, group: "set",
+    thFx: ["เซตหลักสายสกิลกายภาพ: ATK% + ไม่สนป้องกัน (เจาะ DEF)",
+      "ใส่ช่องสายบู๊ (อาวุธ/เครื่องประดับ) ของสายสกิล เช่น สไปรัล, Cart Cannon, ซอนิค, กับดัก"],
+    enFx: ["The physical-skill staple: ATK% + ignore DEF",
+      "Socket on weapon/accessory for skill builds (Spiral, Cart Cannon, Sonic, traps)"] },
+  { id: 14135020, th: "Sharp Gem", en: "Sharpness Gem", zh: "尖銳寶石", icon: "icon_item_stone_02", quality: 5, group: "set",
+    thFx: ["เซตหลักสายออโต้/คริ: อัตราคริ + ดาเมจคริ",
+      "สายออโต้ต้องดันคริเกิน ~100% เพื่อชนะค่าต้านคริของบอส — เซตนี้คือคำตอบ"],
+    enFx: ["The auto-attack/crit staple: crit rate + crit damage",
+      "Auto builds need ~100%+ crit to beat boss crit-resist — this set is the answer"] },
+  { id: 14135021, th: "Famed Bow Gem", en: "Famed Bow Gem", zh: "名弓寶石", icon: "icon_item_stone_03", quality: 5, group: "set",
+    thFx: ["สายธนู/ระยะไกล — ทางเลือกแทนจิตนักสู้ของสายยิงสกิล (ถ้าเวอร์ชันเปิดให้ใช้)"],
+    enFx: ["Bow/ranged set — alternative to Battle Will for shot-skill builds (if enabled this patch)"] },
+  { id: 14135019, th: "Imperious Gem", en: "Domineering Gem", zh: "霸氣寶石", icon: "icon_item_stone_01", quality: 5, group: "set",
+    thFx: ["เม็ดระดับสูง — ยังซื้อจากร้านปกติไม่ได้ คาดดรอปจากคอนเทนต์ยาก/เวิลด์บอส", FX_UNKNOWN_TH],
+    enFx: ["High-tier gem — not purchasable yet; expected from hard content/world boss", FX_UNKNOWN_EN] },
+  { id: 14135026, th: "Healing Gem", en: "Healing Gem", zh: "治療寶石", icon: "icon_item_stone_08", quality: 5, group: "set",
+    thFx: ["แนวทางตามชื่อ: สายฮีล/ซัพพอร์ต", FX_UNKNOWN_TH], enFx: ["By name: heal/support line", FX_UNKNOWN_EN] },
+  { id: 14135027, th: "Diamond Gem", en: "Adamant Gem", zh: "金剛寶石", icon: "icon_item_stone_09", quality: 5, group: "set",
+    thFx: ["แนวทางตามชื่อ: สายป้องกัน/แทงค์", FX_UNKNOWN_TH], enFx: ["By name: defense/tank line", FX_UNKNOWN_EN] },
+  { id: 14135031, th: "อัญมณีผิวศิลา", en: "Stone Skin Gem", zh: "石膚寶石", icon: "icon_item_stone_13", quality: 5, group: "set",
+    thFx: ["แนวทางตามชื่อ: ป้องกันกายภาพ/ลดดาเมจ", FX_UNKNOWN_TH], enFx: ["By name: physical defense/mitigation", FX_UNKNOWN_EN] },
+  { id: 14135028, th: "Compassion Gem", en: "Charity Gem", zh: "愛心寶石", icon: "icon_item_stone_10", quality: 5, group: "set",
+    thFx: ["แนวทางตามชื่อ: สายซัพพอร์ต", FX_UNKNOWN_TH], enFx: ["By name: support line", FX_UNKNOWN_EN] },
+  { id: 14135029, th: "อัญมณีสันติ", en: "Serenity Gem", zh: "平寧寶石", icon: "icon_item_stone_11", quality: 5, group: "set",
+    thFx: ["แนวทางตามชื่อ: ซัพพอร์ต/ฟื้นฟู", FX_UNKNOWN_TH], enFx: ["By name: support/recovery", FX_UNKNOWN_EN] },
+  { id: 14135030, th: "Benediction Gem", en: "Benediction Gem", zh: "祝福寶石", icon: "icon_item_stone_12", quality: 5, group: "set",
+    thFx: ["แนวทางตามชื่อ: บั๊ฟ/ซัพพอร์ต", FX_UNKNOWN_TH], enFx: ["By name: buff/support", FX_UNKNOWN_EN] },
+  { id: 14135024, th: "อัญมณีมารวิญญาณ", en: "Arcane Spirit Gem", zh: "魔靈寶石", icon: "icon_item_stone_06", quality: 5, group: "set",
+    thFx: ["แนวทางตามชื่อ: สายเวท", FX_UNKNOWN_TH], enFx: ["By name: magic line", FX_UNKNOWN_EN] },
+  { id: 14135022, th: "อัญมณีเทพประทาน", en: "Divine Gift Gem", zh: "神賜寶石", icon: "icon_item_stone_04", quality: 5, group: "set",
+    thFx: ["เม็ดพิเศษระดับสูง", FX_UNKNOWN_TH], enFx: ["High-tier special gem", FX_UNKNOWN_EN] },
+  { id: 14135023, th: "อัญมณีปาฏิหาริย์", en: "Miracle Gem", zh: "神蹟寶石", icon: "icon_item_stone_05", quality: 5, group: "set",
+    thFx: ["เม็ดพิเศษระดับสูง", FX_UNKNOWN_TH], enFx: ["High-tier special gem", FX_UNKNOWN_EN] },
+  { id: 14135032, th: "อัญมณีดารา", en: "Stellar Gem", zh: "星辰寶石", icon: "icon_item_stone_14", quality: 5, group: "set",
+    thFx: ["เม็ดพิเศษ", FX_UNKNOWN_TH], enFx: ["Special gem", FX_UNKNOWN_EN] },
+  { id: 14135033, th: "อัญมณีวิญญาณ", en: "Soul Gem", zh: "靈魂寶石", icon: "icon_item_stone_33", quality: 5, group: "set",
+    thFx: ["เม็ดพิเศษ", FX_UNKNOWN_TH], enFx: ["Special gem", FX_UNKNOWN_EN] },
+  { id: 14135034, th: "อัญมณีห้วงมิติ", en: "Void Gem", zh: "虛空寶石", icon: "icon_item_stone_34", quality: 5, group: "set",
+    thFx: ["เม็ดพิเศษ", FX_UNKNOWN_TH], enFx: ["Special gem", FX_UNKNOWN_EN] },
+  { id: 14135035, th: "อัญมณีเงาจันทรา", en: "Shadowmoon Gem", zh: "影月寶石", icon: "icon_item_stone_35", quality: 5, group: "set",
+    thFx: ["เม็ดพิเศษ", FX_UNKNOWN_TH], enFx: ["Special gem", FX_UNKNOWN_EN] },
+  // --- Taiwan-only gems (seen in the TW half-anniversary shop; Thai names coined
+  //     here like the other TW-only content — swap in SEA's names once it ships) ---
+  { id: 14135101, th: "อัญมณีพิณดารา", en: "Starstring Gem", zh: "星弦寶石", icon: "icon_item_stone_29", quality: 5, group: "tw",
+    thFx: ["แนวทางตามชื่อ: สายเครื่องดนตรี (Bard/Dancer)", FX_UNKNOWN_TH], enFx: ["By name: instrument line (Bard/Dancer)", FX_UNKNOWN_EN] },
+  { id: 14135102, th: "อัญมณีกายเหล็ก", en: "Iron Body Gem", zh: "鐵軀寶石", icon: "icon_item_stone_27", quality: 5, group: "tw",
+    thFx: ["แนวทางตามชื่อ: สายแทงค์/กายอึด", FX_UNKNOWN_TH], enFx: ["By name: tank/iron-body line", FX_UNKNOWN_EN] },
+  { id: 14135103, th: "อัญมณีศรลม", en: "Wind Arrow Gem", zh: "風矢寶石", icon: "icon_item_stone_30", quality: 5, group: "tw",
+    thFx: ["แนวทางตามชื่อ: สายธนู/ระยะไกล", FX_UNKNOWN_TH], enFx: ["By name: bow/ranged line", FX_UNKNOWN_EN] },
+  { id: 14135104, th: "อัญมณีม่านเงา", en: "Shadow Veil Gem", zh: "幽幕寶石", icon: "icon_item_stone_31", quality: 5, group: "tw",
+    thFx: ["แนวทางตามชื่อ: สายลอบเร้น/เงา", FX_UNKNOWN_TH], enFx: ["By name: stealth/shadow line", FX_UNKNOWN_EN] },
+  { id: 14135105, th: "อัญมณีคมนักล่า", en: "Hunting Blade Gem", zh: "獵刃寶石", icon: "icon_item_stone_28", quality: 5, group: "tw",
+    thFx: ["แนวทางตามชื่อ: สายคมมีด/นักล่า", FX_UNKNOWN_TH], enFx: ["By name: blade/hunter line", FX_UNKNOWN_EN] },
+  { id: 14135106, th: "อัญมณีพลังลับ", en: "Arcane Source Gem", zh: "秘源寶石", icon: "icon_item_stone_26", quality: 5, group: "tw",
+    thFx: ["แนวทางตามชื่อ: สายเวท/พลังลึกลับ", FX_UNKNOWN_TH], enFx: ["By name: magic/arcane line", FX_UNKNOWN_EN] },
+];
+
+/* =========================================================================
+ * Equipment affixes ("stunts" / forge skills) — the affix planner dataset.
+ *   index:   /affix-simulator/data/stunt_package_index_<locale>.json
+ *   library: /affix-simulator/data/stunt_skill_library_<locale>.json
+ * A "package" groups one affix family's per-level entries. Weapons map by their
+ * subtype (itemSubtype == affix weapon_types 7001+); armor maps to assembly
+ * types — only Armor(4), Cape(7) and Accessory(10) carry affix packages.
+ * ========================================================================= */
+export interface AffixStunt {
+  id: number; name: string; desc: string; level: number;
+  quality: number; icon?: string; jobIds: number[];
+  stats?: Record<string, number>;   // flat bonuses parsed from the text (best-effort)
+}
+export interface AffixIndex {
+  weaponTypes: Record<string, { name: string; icon?: string }>;
+  assemblyTypes: Record<string, { name: string; icon?: string }>;
+  weaponPkgByTypeLevel: Record<string, Record<string, number[]>>;
+  armorPkgByTypeLevel: Record<string, Record<string, number[]>>;
+}
+export interface AffixData {
+  index: AffixIndex;
+  packages: Record<string, AffixStunt[]>;
+  stuntById: Record<number, AffixStunt>;          // global stunt id -> stunt
+  // forge eligibility: which stunt ids a job can forge on a weapon/armor type.
+  // This is the authoritative class filter (entry.job_ids alone is NOT — Monk &
+  // Crusader/Paladin only resolve correctly through these maps).
+  weaponForge: Record<string, Record<string, number[]>>;
+  armorForge: Record<string, Record<string, number[]>>;
+}
+export interface AffixOption { packageId: string; name: string; quality: number; icon?: string; entries: AffixStunt[]; }
+
+const _affixCache: Record<string, AffixData> = {};
+export async function fetchAffixData(locale: string): Promise<AffixData> {
+  if (_affixCache[locale]) return _affixCache[locale];
+  const [idx, lib] = await Promise.all([
+    getJSON(BASE_DATA + "/affix-simulator/data/stunt_package_index_" + locale + ".json"),
+    getJSON(BASE_DATA + "/affix-simulator/data/stunt_skill_library_" + locale + ".json"),
+  ]);
+  const packages: Record<string, AffixStunt[]> = {};
+  const stuntById: Record<number, AffixStunt> = {};
+  for (const [pid, p] of Object.entries((lib && lib.packages) || {})) {
+    packages[pid] = (((p as any).entries) || []).map((e: any) => {
+      const s = e.stunt || e;
+      const name = stripColorTags(s.name);
+      const desc = stripColorTags(s.desc);
+      const out: AffixStunt = {
+        id: Number(s.id),
+        name,
+        desc,
+        level: Number(s.level) || 1,
+        quality: Number(s.color) || 0,
+        icon: s.icon,
+        jobIds: Array.isArray(s.job_ids) ? s.job_ids.map(Number) : [],
+        stats: parseCardStats([name + " " + desc]),
+      };
+      stuntById[out.id] = out;
+      return out;
+    });
+  }
+  const fjf = (idx && idx.forge_job_filter) || {};
+  const data: AffixData = {
+    index: {
+      weaponTypes: (idx && idx.weapon_types) || {},
+      assemblyTypes: (idx && idx.assembly_types) || {},
+      weaponPkgByTypeLevel: (idx && idx.weapon_packages_by_type_and_level) || {},
+      armorPkgByTypeLevel: (idx && idx.armor_packages_by_type_and_level) || {},
+    },
+    packages,
+    stuntById,
+    weaponForge: fjf.weapon_stunts_by_type_and_job || {},
+    armorForge: fjf.armor_stunts_by_type_and_job || {},
+  };
+  _affixCache[locale] = data;
+  return data;
+}
+
+// Map an equipped item to its affix lookup (mode + type key), or null if the
+// slot can't take affixes (head/face/mouth/shoes/back/shield have no packages).
+export function affixSlotForItem(item: NormItem): { mode: "weapon" | "armor"; typeId: string } | null {
+  const k = item.slotKey || "";
+  if (k === "weapon") return item.subtypeCode ? { mode: "weapon", typeId: String(item.subtypeCode) } : null;
+  if (k === "armor") return { mode: "armor", typeId: "4" };
+  if (k === "garment") return { mode: "armor", typeId: "7" };
+  if (k.startsWith("accessory")) return { mode: "armor", typeId: "10" };
+  return null;
+}
+
+// The affixes an item can take for the build's class. `jobPath` is the class
+// chain from specific -> base (e.g. Paladin -> Crusader -> ...); the first id
+// the forge map knows wins, so advancement classes the affix system omits
+// (Paladin/223, Royal Guard/224, ...) fall back to their forge-able ancestor.
+export function affixOptionsForItem(data: AffixData, item: NormItem, jobPath: number[]): AffixOption[] {
+  const slot = affixSlotForItem(item);
+  if (!slot) return [];
+  const byType = (slot.mode === "weapon" ? data.weaponForge : data.armorForge)[slot.typeId] || {};
+  let ids: number[] | undefined;
+  for (const j of jobPath) { if (byType[String(j)]) { ids = byType[String(j)]; break; } }
+  if (!ids) ids = [...new Set(Object.values(byType).flat())];   // no class -> everything for this type
+  const groups = new Map<string, AffixOption>();
+  for (const id of ids) {
+    const s = data.stuntById[id];
+    if (!s) continue;
+    const key = s.name + "|" + s.quality;
+    let g = groups.get(key);
+    if (!g) { g = { packageId: key, name: s.name, quality: s.quality, icon: s.icon, entries: [] }; groups.set(key, g); }
+    if (!g.entries.some((x) => x.id === s.id)) g.entries.push(s);
+  }
+  const out = [...groups.values()];
+  out.forEach((g) => g.entries.sort((a, b) => a.level - b.level));
+  out.sort((a, b) => (b.quality || 0) - (a.quality || 0) || a.name.localeCompare(b.name));
+  return out;
 }
 
 /* =========================================================================
@@ -810,6 +1350,13 @@ export const SLOT_DEFS: SlotDef[] = [
   { key: "tail",      order: 8,  aliases: ["尾飾", "หาง", "Tail"] },
   { key: "shoes",     order: 9,  aliases: ["鞋子", "รองเท้า", "Shoes", "Footgear", "Boots"] },
   { key: "accessory", order: 10, aliases: ["飾品", "เครื่องประดับ", "Accessory", "Accessories"] },
+  // gem-tab section keys (not equipment slots — only here so groupByType orders
+  // the Gems browse sections: how-to first, then stat/basic/set/TW gems)
+  { key: "gem_info",  order: 50, aliases: [] },
+  { key: "gem_stat",  order: 51, aliases: [] },
+  { key: "gem_basic", order: 52, aliases: [] },
+  { key: "gem_set",   order: 53, aliases: [] },
+  { key: "gem_tw",    order: 54, aliases: [] },
 ];
 
 const _slotAlias: Record<string, SlotDef> = {};
@@ -890,6 +1437,39 @@ export async function fetchSkillIndex(locale: string): Promise<Record<number, Jo
       hasSkills: !!j.has_skills,
     };
   });
+
+  // Heal gaps in the job tree: some advancement classes (e.g. Paladin/223,
+  // Champion/523) are referenced as a parent but omitted from the index, which
+  // strands their whole branch (Royal Guard, Sura) and hides them from the
+  // planner. Their per-job skill files DO exist, so pull each referenced-but-
+  // missing parent in to reconnect the chain.
+  const missing = new Set<number>();
+  for (const j of Object.values(out)) {
+    if (j.parent && !out[j.parent]) missing.add(j.parent);
+  }
+  if (missing.size) {
+    const healed = await Promise.all(
+      [...missing].map(async (id) => {
+        try {
+          const jd = await getJSON(BASE_DATA + "/skill-simulator/data/jobs_" + locale + "/" + id + ".json");
+          const job = jd.job || jd;
+          const count = job.skills ? Object.keys(job.skills).length : 0;
+          return {
+            id: Number(job.job_id ?? id),
+            name: stripColorTags(job.job_name || job.name || "Job " + id),
+            icon: job.job_icon,
+            parent: Number(job.parent) || 0,
+            children: Array.isArray(job.children) ? job.children.map(Number) : [],
+            points: Number(job.skill_point_limit) || 0,
+            hasSkills: count > 0,
+          } as JobNode;
+        } catch {
+          return null;
+        }
+      })
+    );
+    healed.forEach((n) => { if (n) out[n.id] = n; });
+  }
   return out;
 }
 
@@ -907,10 +1487,18 @@ export function skillPathTo(index: Record<number, JobNode>, target: number): num
   return path.length ? path : [101];
 }
 
-// every job in the path (incl. self) must have skills (matches the site's filter)
+// Playable classes the SEA skills_index still flags has_skills=false, but whose
+// job skill files we populate from the Taiwan dataset (see scripts/sync-data.mjs).
+// Force them visible like every other class. Drop an id once SEA flags it itself.
+export const SKILL_FORCE_JOBS = new Set<number>([722, 422, 432, 723, 423, 433]); // Alchemist/Bard/Dancer + T2 Creator/Clown/Gypsy
+
+// every job in the path (incl. self) must have skills (matches the site's filter),
+// or the class is force-shown and at least one ancestor carries skills.
 export function jobPathHasSkills(index: Record<number, JobNode>, jobId: number): boolean {
   const p = skillPathTo(index, jobId);
-  return p.length > 0 && p.every((id) => index[id] && index[id].hasSkills);
+  if (p.length > 0 && p.every((id) => index[id] && index[id].hasSkills)) return true;
+  if (SKILL_FORCE_JOBS.has(Number(jobId)) && p.some((id) => index[id] && index[id].hasSkills)) return true;
+  return false;
 }
 
 export async function fetchJobSkills(jobId: number | string, locale: string): Promise<{ skills: SkillNode[]; jobName: string }> {

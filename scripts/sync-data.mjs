@@ -9,6 +9,13 @@
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { translateTwSkills } from "./translate-tw-skills.mjs";
+import { mergeTwDruid } from "./merge-tw-druid.mjs";
+import { translateTwDruid } from "./translate-tw-druid.mjs";
+import { mergeTwAffixes } from "./merge-tw-affixes.mjs";
+import { applyTwAffixTh } from "./apply-tw-affix-th.mjs";
+import { mergeTwEquipment } from "./merge-tw-equipment.mjs";
+import { applyTwEquipTh } from "./apply-tw-equip-th.mjs";
 
 const ORIGIN = "https://roworlddb.com";
 const BASE = ORIGIN + "/sea";
@@ -26,6 +33,8 @@ const PER_LOCALE = [
   "map-simulator/data/map_index_{loc}.json",
   "apocalypse-simulator/data/apocalypse_planner_{loc}.json",
   "skill-simulator/data/engine_runes_{loc}.json",
+  "affix-simulator/data/stunt_package_index_{loc}.json",
+  "affix-simulator/data/stunt_skill_library_{loc}.json",
 ];
 
 // Locale-independent files.
@@ -83,11 +92,58 @@ async function main() {
     const ids = Object.values(jobs)
       .map((j) => j && j.job_id)
       .filter((v) => v != null);
-    console.log("  jobs: fetching " + ids.length + " skill files...");
-    await pool(ids, 8, (id) =>
+    // Some advancement classes (e.g. Paladin/223, Champion/523) are referenced as
+    // a parent but missing from the index; their skill files still exist upstream,
+    // so mirror them too — the app heals the tree from these (see fetchSkillIndex).
+    const present = new Set(ids.map(Number));
+    const missingParents = Object.values(jobs)
+      .map((j) => j && Number(j.parent))
+      .filter((p) => p && !present.has(p));
+    const allIds = [...new Set([...ids, ...missingParents])];
+    console.log("  jobs: fetching " + allIds.length + " skill files...");
+    await pool(allIds, 8, (id) =>
       grab("skill-simulator/data/jobs_" + loc + "/" + id + ".json", { quiet: true })
     );
+
+    // Classes the SEA server hasn't shipped skills for yet (Alchemist/Bard/Dancer)
+    // already have full skill data on the Taiwan dataset (served from the site
+    // ROOT, no /sea prefix). Overwrite the empty SEA job files with Taiwan's so
+    // they show real skills. Drop an id here once SEA ships its own data.
+    const TW_SKILL_JOBS = [422, 432, 722, 423, 433, 723];
+    for (const id of TW_SKILL_JOBS) {
+      const rel = "skill-simulator/data/jobs_" + loc + "/" + id + ".json";
+      try {
+        const res = await fetch(ORIGIN + "/" + rel); // root host = Taiwan
+        if (!res.ok) continue;
+        const text = await res.text();
+        const job = JSON.parse(text).job || JSON.parse(text);
+        if (job && job.skills && Object.keys(job.skills).length) {
+          await writeFile(await outPath(rel), text);
+          okCount++;
+          console.log("  ok   " + rel + "  (Taiwan, " + Object.keys(job.skills).length + " skills)");
+        }
+      } catch (e) {
+        failCount++;
+      }
+    }
   }
+
+  // Localize the Taiwan-sourced skill files (Bard/Dancer/Alchemist) to EN/TH.
+  await translateTwSkills();
+  // Mirror the Taiwan-only Druid line (901 Druid -> 912 Karnos -> 913 Alitea)
+  // into the tree (SEA hasn't shipped it), then localize its skills to EN/TH.
+  await mergeTwDruid();
+  await translateTwDruid();
+  // Pull Taiwan's fuller affix set (instrument/whip/knuckle + new classes) in,
+  // keeping SEA's existing localized affix text.
+  await mergeTwAffixes();
+  // Translate the Taiwan-only affixes (new classes) that arrive with Chinese
+  // name/desc into Thai using the map in tw-affix-th.json.
+  await applyTwAffixTh();
+  // Pull Taiwan's fuller equipment set (instrument/whip/knuckle + event gear) in,
+  // then translate the Taiwan-only item names to Thai.
+  await mergeTwEquipment();
+  await applyTwEquipTh();
 
   console.log("\nDone. " + okCount + " ok, " + failCount + " failed.");
 }
