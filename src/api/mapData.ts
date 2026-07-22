@@ -60,21 +60,50 @@ interface CardPointsRaw {
   data: Record<string, any[]>;
 }
 
-// A single plottable point on a map: either a monster spawn spot or a card
-// collection point, normalized to one shape so the screen can render + filter
-// them uniformly.
-export type MapLayer = "mvp" | "elite" | "mini" | "card";
+// A single plottable point on a map: either a monster spawn spot, a card
+// collection point, or a chef recipe pickup, normalized to one shape so the
+// screen can render + filter them uniformly.
+export type MapLayer = "mvp" | "elite" | "mini" | "card" | "recipe";
 
 export interface MapMarker {
   layer: MapLayer;
   key: string;           // stable id for React lists
   name: string;
-  icon: string;          // /media/images/map_mark/<icon>.webp
+  icon?: string;         // /media/images/map_mark/<icon>.webp
+  emoji?: string;        // used instead of icon when there's no in-game mark icon for this layer
   portrait?: string;     // /media/images/monster/<portrait>.webp (monsters only)
   x: number;             // world X
   z: number;             // world Z
   reward?: CardRewardItem[];
 }
+
+// Chef recipe pickup points. roworlddb.com's own map tool doesn't track this
+// collectible (only cards + monster spawns), so this list is hand-compiled
+// from the community exploration write-up for "RO: World Tour" (仙境傳說：世界之旅) —
+// https://forum.gamer.com.tw/C.php?bsn=83054&snA=1890 ("食譜＆卡片之神探索整理",
+// 17 recipes / 40 cards / 57 points total; the 40 cards match monster_cards.json
+// exactly, confirming the recipe list is the missing complement). Coordinates
+// are the community's raw (X,Y) which is the game's worldX/worldZ convention.
+interface RecipePoint { sceneId: number; nameTh: string; nameEn: string; x: number; z: number; }
+const RECIPE_POINTS: RecipePoint[] = [
+  { sceneId: 70077, nameTh: "สูตรพายฟักทอง", nameEn: "Pumpkin Pie Recipe", x: 184, z: 181 },
+  { sceneId: 104, nameTh: "สลัดเขียว", nameEn: "Green Salad", x: 144, z: 96 },
+  { sceneId: 104, nameTh: "สูตรอาหาร STR", nameEn: "Strength Recipe", x: 58, z: 157 },
+  { sceneId: 104, nameTh: "สูตรอาหาร AGI", nameEn: "Agility Recipe", x: 58, z: 162 },
+  { sceneId: 101, nameTh: "ซุปปลาสีฟ้า", nameEn: "Blue Fish Soup", x: 686, z: 852 },
+  { sceneId: 101, nameTh: "สูตรไวน์องุ่น", nameEn: "Wine Recipe", x: 428, z: 428 },
+  { sceneId: 101, nameTh: "เยลลี่เชอร์รี่", nameEn: "Cherry Jelly", x: 575, z: 313 },
+  { sceneId: 107, nameTh: "สูตรซุปเวทมนตร์สด", nameEn: "Fresh Mana Soup Recipe", x: 643, z: 318 },
+  { sceneId: 107, nameTh: "อาหารบำรุงธาตุ VIT", nameEn: "Vitality Dish", x: 132, z: 74 },
+  { sceneId: 106, nameTh: "สูตรซุปเวทมนตร์ข้น", nameEn: "Thick Mana Soup Recipe", x: 198, z: 129 },
+  { sceneId: 106, nameTh: "สูตรซุปหนวดปลาหมึก", nameEn: "Squid Tentacle Soup Recipe", x: 99, z: 99 },
+  { sceneId: 102, nameTh: "โจ๊กปูม่วง", nameEn: "Purple Crab Porridge", x: 458, z: 462 },
+  { sceneId: 102, nameTh: "สูตรอาหาร STR ขั้นสูงสุด", nameEn: "Premium Strength Recipe", x: 137, z: 590 },
+  { sceneId: 103, nameTh: "สูตรเค้กมันเทศ", nameEn: "Sweet Potato Cake Recipe", x: 510, z: 408 },
+  { sceneId: 103, nameTh: "สูตรหม้อไฟปลาแดง", nameEn: "Red Fish Stew Recipe", x: 240, z: 425 },
+  { sceneId: 103, nameTh: "ซุปอาหารทะเลแม่น้ำ", nameEn: "River Seafood Soup", x: 529, z: 548 },
+  { sceneId: 103, nameTh: "พุดดิ้งแอปเปิ้ล", nameEn: "Apple Pudding", x: 682, z: 517 },
+];
 
 const _mapIndexCache = new Map<string, MapIndex>();
 export async function fetchMapIndex(locale: string): Promise<MapIndex> {
@@ -167,6 +196,18 @@ export async function fetchMarkersByScene(locale: string): Promise<Map<number, M
       });
     }
   }
+
+  const th = locale === "th-TH";
+  RECIPE_POINTS.forEach((r, i) => {
+    push(r.sceneId, {
+      layer: "recipe",
+      key: "recipe_" + i,
+      name: th ? r.nameTh : r.nameEn,
+      emoji: "📜",
+      x: r.x,
+      z: r.z,
+    });
+  });
 
   return byScene;
 }

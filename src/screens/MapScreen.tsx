@@ -13,6 +13,7 @@ const LOCALES = ["en-US", "th-TH", "zh-TW"];
 
 const LAYER_DEFS: { key: MapLayer; th: string; en: string; color: string }[] = [
   { key: "card", th: "การ์ด", en: "Cards", color: "#E8B339" },
+  { key: "recipe", th: "สูตรอาหาร", en: "Recipes", color: "#8B5E3C" },
   { key: "mvp", th: "MVP", en: "MVP", color: "#A65CD6" },
   { key: "elite", th: "Elite", en: "Elite", color: "#E0533D" },
   { key: "mini", th: "Mini", en: "Mini", color: "#5DBB63" },
@@ -77,10 +78,14 @@ function MarkerModal({
       <TouchableOpacity style={styles.markerModalBg} activeOpacity={1} onPress={onClose}>
         <TouchableOpacity activeOpacity={1} style={styles.markerCard}>
           <View style={styles.markerHead}>
-            {marker.portrait ? (
+            {marker.emoji ? (
+              <View style={[styles.markerPortrait, styles.markerEmojiWrap]}>
+                <Text style={styles.markerEmojiLarge}>{marker.emoji}</Text>
+              </View>
+            ) : marker.portrait ? (
               <Image source={{ uri: monsterPortraitUrl(marker.portrait) }} style={styles.markerPortrait} resizeMode="contain" />
             ) : (
-              <Image source={{ uri: mapMarkIconUrl(marker.icon) }} style={styles.markerPortrait} resizeMode="contain" />
+              <Image source={{ uri: mapMarkIconUrl(marker.icon!) }} style={styles.markerPortrait} resizeMode="contain" />
             )}
             <View style={{ flex: 1 }}>
               <Text style={styles.markerName}>{marker.name}</Text>
@@ -118,7 +123,7 @@ export default function MapScreen() {
   const [sceneId, setSceneId] = useState<number | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selectedMarker, setSelectedMarker] = useState<MapMarker | null>(null);
-  const [visible, setVisible] = useState<Record<MapLayer, boolean>>({ card: true, mvp: true, elite: true, mini: true });
+  const [visible, setVisible] = useState<Record<MapLayer, boolean>>({ card: true, recipe: true, mvp: true, elite: true, mini: true });
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
   const [zoom, setZoom] = useState(MIN_ZOOM);
   const [pan, setPan] = useState({ x: 0, y: 0 }); // top-left offset of content within the viewport, always <= 0
@@ -218,7 +223,7 @@ export default function MapScreen() {
   const visibleMarkers = currentMarkers.filter((m) => visible[m.layer]);
 
   const counts = useMemo(() => {
-    const c: Record<MapLayer, number> = { card: 0, mvp: 0, elite: 0, mini: 0 };
+    const c: Record<MapLayer, number> = { card: 0, recipe: 0, mvp: 0, elite: 0, mini: 0 };
     currentMarkers.forEach((m) => { c[m.layer]++; });
     return c;
   }, [currentMarkers]);
@@ -298,7 +303,11 @@ export default function MapScreen() {
                       onPress={() => setSelectedMarker(m)}
                     >
                       <View style={[styles.markerHalo, { borderColor: layerColor }]}>
-                        <Image source={{ uri: mapMarkIconUrl(m.icon) }} style={styles.markerIcon} resizeMode="contain" />
+                        {m.emoji ? (
+                          <Text style={styles.markerEmoji}>{m.emoji}</Text>
+                        ) : (
+                          <Image source={{ uri: mapMarkIconUrl(m.icon!) }} style={styles.markerIcon} resizeMode="contain" />
+                        )}
                       </View>
                     </TouchableOpacity>
                   );
@@ -380,6 +389,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, alignItems: "center", justifyContent: "center",
     shadowColor: "#000", shadowOpacity: 0.35, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 3 },
   markerIcon: { width: 18, height: 18 },
+  markerEmoji: { fontSize: 13, lineHeight: 16 },
   hint: { color: "#8A97AD", fontSize: 12, marginTop: 8 },
 
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
@@ -404,6 +414,8 @@ const styles = StyleSheet.create({
   markerCard: { backgroundColor: "#FFFFFF", borderRadius: 14, padding: 16, width: "100%", maxWidth: 360 },
   markerHead: { flexDirection: "row", alignItems: "center" },
   markerPortrait: { width: 48, height: 48, marginRight: 12, backgroundColor: "#EAF1FB", borderRadius: 8 },
+  markerEmojiWrap: { alignItems: "center", justifyContent: "center" },
+  markerEmojiLarge: { fontSize: 28 },
   markerName: { color: "#41506B", fontSize: 16, fontWeight: "bold" },
   markerBadge: { alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, marginTop: 4 },
   markerBadgeText: { color: "#FFFFFF", fontSize: 11, fontWeight: "bold" },
