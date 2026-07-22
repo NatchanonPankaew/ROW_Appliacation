@@ -105,11 +105,13 @@ async function fetchCardPointsRaw(locale: string): Promise<CardPointsRaw> {
   return d;
 }
 
-// Group every monster spawn + card point by the scene it actually renders on
-// (each spawn marker / card entry carries its own scene_id), rather than by
-// the upstream "view" bucket a scene was indexed under — a view can bundle a
-// city with its surrounding field maps, which would otherwise mix markers
-// from neighboring scenes onto the wrong background image.
+// Group every monster spawn + card point by the upstream "view" a scene
+// belongs to, not by each marker's own raw scene_id. A view bundles a city
+// with its surrounding, seamlessly-connected field maps (e.g. Geffen's city +
+// its 6 gate/bank/wilds scenes all share one coordinate space and one view
+// key, "107"): the site shows them together on that region's single wide
+// background image rather than as separate maps per gate. Splitting by raw
+// scene_id would fragment one region into a dozen near-empty picker entries.
 export async function fetchMarkersByScene(locale: string): Promise<Map<number, MapMarker[]>> {
   const [spawns, cards] = await Promise.all([
     fetchMonsterSpawnsRaw(locale),
@@ -123,11 +125,19 @@ export async function fetchMarkersByScene(locale: string): Promise<Map<number, M
     else byScene.set(sceneId, [m]);
   };
 
-  for (const view of Object.values(spawns.views || {})) {
+  // Every raw scene_id a view's markers ever reference belongs to that view's
+  // region (e.g. 10702-10709 -> 107 Geffen). Card points reuse this map so a
+  // card sitting in one of those same field scenes folds into the region too,
+  // instead of becoming its own near-empty picker entry.
+  const sceneToView = new Map<number, number>();
+
+  for (const [viewKey, view] of Object.entries(spawns.views || {})) {
+    const viewId = Number(viewKey);
     for (const group of view.monsters || []) {
       if (group.family !== "elite" && group.family !== "mini" && group.family !== "mvp") continue;
       group.markers.forEach((mk, i) => {
-        push(mk.scene_id, {
+        sceneToView.set(mk.scene_id, viewId);
+        push(viewId, {
           layer: group.family as MapLayer,
           key: group.key + "_" + i,
           name: group.name,
@@ -142,9 +152,10 @@ export async function fetchMarkersByScene(locale: string): Promise<Map<number, M
 
   for (const arr of Object.values(cards.data || {})) {
     for (const e of arr || []) {
-      const sceneId = Number(e.sceneId);
+      const rawSceneId = Number(e.sceneId);
       const pos = e.objectPos;
-      if (!Number.isFinite(sceneId) || !Array.isArray(pos)) continue;
+      if (!Number.isFinite(rawSceneId) || !Array.isArray(pos)) continue;
+      const sceneId = sceneToView.get(rawSceneId) ?? rawSceneId;
       push(sceneId, {
         layer: "card",
         key: "card_" + e.id,
