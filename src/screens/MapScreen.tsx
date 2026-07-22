@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
   View, Text, TouchableOpacity, StyleSheet, Image, Modal, ScrollView,
-  TextInput, FlatList, ActivityIndicator, useWindowDimensions,
+  TextInput, FlatList, ActivityIndicator, useWindowDimensions, Platform,
 } from "react-native";
 import {
   fetchMapIndex, fetchMarkersByScene, mapMarkIconUrl, monsterPortraitUrl,
@@ -19,6 +19,10 @@ const LAYER_DEFS: { key: MapLayer; th: string; en: string; color: string }[] = [
 ];
 
 interface PickableMap { sceneId: number; name: string; picRes: string; }
+
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 4;
+const ZOOM_STEP = 0.5;
 
 function MapPickerModal({
   maps, locale, onPick, onClose,
@@ -116,7 +120,28 @@ export default function MapScreen() {
   const [selectedMarker, setSelectedMarker] = useState<MapMarker | null>(null);
   const [visible, setVisible] = useState<Record<MapLayer, boolean>>({ card: true, mvp: true, elite: true, mini: true });
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
+  const [zoom, setZoom] = useState(MIN_ZOOM);
+  const hScrollRef = useRef<ScrollView>(null);
+  const vScrollRef = useRef<ScrollView>(null);
   const th = locale === "th-TH";
+
+  // Reset pan/zoom whenever a different map is picked, so it always opens fit-to-screen.
+  useEffect(() => {
+    setZoom(MIN_ZOOM);
+    hScrollRef.current?.scrollTo({ x: 0, y: 0, animated: false });
+    vScrollRef.current?.scrollTo({ x: 0, y: 0, animated: false });
+  }, [sceneId]);
+
+  const zoomBy = useCallback((delta: number) => {
+    setZoom((z) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round((z + delta) * 10) / 10)));
+  }, []);
+
+  // Web bonus: mouse wheel also zooms the map. React attaches wheel listeners
+  // as passive, so preventDefault() can't stop the underlying scroll — that's
+  // fine here, the scroll and the zoom step just both happen together.
+  const webWheelProps = Platform.OS === "web" ? {
+    onWheel: (e: any) => zoomBy(e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP),
+  } : {};
 
   const load = useCallback(async (loc: string) => {
     setLoading(true);
@@ -211,29 +236,66 @@ export default function MapScreen() {
       ) : !currentCfg ? (
         <View style={styles.center}><Text style={styles.empty}>{th ? "ไม่มีข้อมูลแมพ" : "No map data"}</Text></View>
       ) : (
-        <ScrollView contentContainerStyle={{ alignItems: "center", paddingVertical: 12 }}>
-          <View style={{ width: containerWidth, aspectRatio: aspect, backgroundColor: "#0F1626", borderRadius: 12, overflow: "hidden" }}>
-            <Image source={{ uri: mapBackgroundUrl(currentCfg.pic_res) }} style={StyleSheet.absoluteFill} resizeMode="contain" />
-            {visibleMarkers.map((m) => {
-              const { left, top } = worldToImageFraction(currentCfg, m.x, m.z);
-              if (left < -0.02 || left > 1.02 || top < -0.02 || top > 1.02) return null;
-              const layerColor = LAYER_DEFS.find((l) => l.key === m.layer)?.color || "#FFFFFF";
-              return (
-                <TouchableOpacity
-                  key={m.key}
-                  style={[styles.marker, { left: `${left * 100}%`, top: `${top * 100}%` }]}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  onPress={() => setSelectedMarker(m)}
-                >
-                  <View style={[styles.markerHalo, { borderColor: layerColor }]}>
-                    <Image source={{ uri: mapMarkIconUrl(m.icon) }} style={styles.markerIcon} resizeMode="contain" />
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
+        <View style={{ flex: 1 }}>
+          <ScrollView
+            ref={hScrollRef}
+            horizontal
+            style={{ flex: 1 }}
+            contentContainerStyle={{ minWidth: "100%" }}
+            showsHorizontalScrollIndicator={false}
+            {...webWheelProps}
+          >
+            <ScrollView
+              ref={vScrollRef}
+              style={{ flex: 1 }}
+              contentContainerStyle={{ minHeight: "100%", alignItems: "center", justifyContent: "center", paddingVertical: 12 }}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={{ width: containerWidth * zoom, aspectRatio: aspect, backgroundColor: "#0F1626", borderRadius: 12, overflow: "hidden" }}>
+                <Image source={{ uri: mapBackgroundUrl(currentCfg.pic_res) }} style={StyleSheet.absoluteFill} resizeMode="contain" />
+                {visibleMarkers.map((m) => {
+                  const { left, top } = worldToImageFraction(currentCfg, m.x, m.z);
+                  if (left < -0.02 || left > 1.02 || top < -0.02 || top > 1.02) return null;
+                  const layerColor = LAYER_DEFS.find((l) => l.key === m.layer)?.color || "#FFFFFF";
+                  return (
+                    <TouchableOpacity
+                      key={m.key}
+                      style={[styles.marker, { left: `${left * 100}%`, top: `${top * 100}%` }]}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      onPress={() => setSelectedMarker(m)}
+                    >
+                      <View style={[styles.markerHalo, { borderColor: layerColor }]}>
+                        <Image source={{ uri: mapMarkIconUrl(m.icon) }} style={styles.markerIcon} resizeMode="contain" />
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          </ScrollView>
+
+          <View style={styles.zoomControls}>
+            <TouchableOpacity
+              style={[styles.zoomBtn, zoom >= MAX_ZOOM && styles.zoomBtnDisabled]}
+              onPress={() => zoomBy(ZOOM_STEP)}
+              disabled={zoom >= MAX_ZOOM}
+            >
+              <Text style={styles.zoomBtnText}>+</Text>
+            </TouchableOpacity>
+            <Text style={styles.zoomPct}>{Math.round(zoom * 100)}%</Text>
+            <TouchableOpacity
+              style={[styles.zoomBtn, zoom <= MIN_ZOOM && styles.zoomBtnDisabled]}
+              onPress={() => zoomBy(-ZOOM_STEP)}
+              disabled={zoom <= MIN_ZOOM}
+            >
+              <Text style={styles.zoomBtnText}>−</Text>
+            </TouchableOpacity>
           </View>
-          <Text style={styles.hint}>{th ? "แตะจุดบนแมพเพื่อดูรายละเอียด" : "Tap a point on the map for details"}</Text>
-        </ScrollView>
+
+          <Text style={styles.hint}>
+            {th ? "แตะจุดบนแมพเพื่อดูรายละเอียด • ใช้ปุ่ม +/− เพื่อซูมโฟกัส" : "Tap a point for details • use +/− to zoom in and pan"}
+          </Text>
+        </View>
       )}
 
       {pickerOpen && (
@@ -270,6 +332,15 @@ const styles = StyleSheet.create({
   legendChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, margin: 4, borderWidth: 1.5, backgroundColor: "#FFFFFF" },
   legendText: { fontSize: 13, fontWeight: "bold" },
   legendTextOn: { color: "#FFFFFF" },
+
+  zoomControls: { position: "absolute", right: 16, bottom: 16, alignItems: "center",
+    backgroundColor: "#FFFFFF", borderRadius: 12, borderWidth: 1, borderColor: "#DCE6F4",
+    paddingVertical: 4, shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 }, elevation: 4 },
+  zoomBtn: { width: 38, height: 38, alignItems: "center", justifyContent: "center" },
+  zoomBtnDisabled: { opacity: 0.35 },
+  zoomBtnText: { color: "#41506B", fontSize: 20, fontWeight: "bold" },
+  zoomPct: { color: "#8A97AD", fontSize: 11, fontWeight: "bold", paddingVertical: 2 },
 
   marker: { position: "absolute", width: 24, height: 24, marginLeft: -12, marginTop: -12 },
   markerHalo: { width: 24, height: 24, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.85)",
