@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
-  View, Text, TouchableOpacity, StyleSheet, Image, Modal, ScrollView,
-  TextInput, FlatList, ActivityIndicator, useWindowDimensions, Platform,
+  View, Text, TouchableOpacity, StyleSheet, Image, Modal,
+  TextInput, FlatList, ActivityIndicator, useWindowDimensions, Platform, PanResponder,
 } from "react-native";
 import {
   fetchMapIndex, fetchMarkersByScene, mapMarkIconUrl, monsterPortraitUrl,
@@ -121,24 +121,68 @@ export default function MapScreen() {
   const [visible, setVisible] = useState<Record<MapLayer, boolean>>({ card: true, mvp: true, elite: true, mini: true });
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
   const [zoom, setZoom] = useState(MIN_ZOOM);
-  const hScrollRef = useRef<ScrollView>(null);
-  const vScrollRef = useRef<ScrollView>(null);
+  const [pan, setPan] = useState({ x: 0, y: 0 }); // top-left offset of content within the viewport, always <= 0
   const th = locale === "th-TH";
+
+  const containerWidth = Math.min(width - 32, 720);
+  const aspect = imgSize ? imgSize.w / imgSize.h : 1;
+  const viewport = { w: containerWidth, h: containerWidth / aspect };
+  const content = { w: containerWidth * zoom, h: (containerWidth * zoom) / aspect };
+
+  // Keep the latest pan/sizes in refs so the PanResponder's callbacks (created
+  // once) always read fresh values instead of a stale closure from first render.
+  const panRef = useRef(pan);
+  useEffect(() => { panRef.current = pan; }, [pan]);
+  const sizeRef = useRef({ viewport, content });
+  sizeRef.current = { viewport, content };
+
+  const clampPan = (p: { x: number; y: number }, c: { w: number; h: number }, v: { w: number; h: number }) => {
+    const minX = Math.min(0, v.w - c.w);
+    const minY = Math.min(0, v.h - c.h);
+    return { x: Math.max(minX, Math.min(0, p.x)), y: Math.max(minY, Math.min(0, p.y)) };
+  };
 
   // Reset pan/zoom whenever a different map is picked, so it always opens fit-to-screen.
   useEffect(() => {
     setZoom(MIN_ZOOM);
-    hScrollRef.current?.scrollTo({ x: 0, y: 0, animated: false });
-    vScrollRef.current?.scrollTo({ x: 0, y: 0, animated: false });
+    setPan({ x: 0, y: 0 });
   }, [sceneId]);
 
+  // Zoom while keeping whatever point is currently centered in the viewport
+  // centered afterwards too, instead of jumping back to the top-left corner.
   const zoomBy = useCallback((delta: number) => {
-    setZoom((z) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round((z + delta) * 10) / 10)));
-  }, []);
+    setZoom((prevZoom) => {
+      const nz = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round((prevZoom + delta) * 10) / 10));
+      if (nz === prevZoom) return prevZoom;
+      const { viewport: v } = sizeRef.current;
+      const oldW = containerWidth * prevZoom, oldH = oldW / aspect;
+      const newW = containerWidth * nz, newH = newW / aspect;
+      const cur = panRef.current;
+      const fx = (v.w / 2 - cur.x) / oldW;
+      const fy = (v.h / 2 - cur.y) / oldH;
+      setPan(clampPan({ x: v.w / 2 - fx * newW, y: v.h / 2 - fy * newH }, { w: newW, h: newH }, v));
+      return nz;
+    });
+  }, [containerWidth, aspect]);
+
+  // Drag-to-pan: only claim the gesture once the touch/mouse actually moves
+  // (onStartShouldSet = false) so marker taps underneath still fire normally.
+  const dragStart = useRef({ x: 0, y: 0 });
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_evt, g) => Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4,
+      onPanResponderGrant: () => { dragStart.current = { ...panRef.current }; },
+      onPanResponderMove: (_evt, g) => {
+        const { content: c, viewport: v } = sizeRef.current;
+        setPan(clampPan({ x: dragStart.current.x + g.dx, y: dragStart.current.y + g.dy }, c, v));
+      },
+    })
+  ).current;
 
   // Web bonus: mouse wheel also zooms the map. React attaches wheel listeners
-  // as passive, so preventDefault() can't stop the underlying scroll — that's
-  // fine here, the scroll and the zoom step just both happen together.
+  // as passive, so preventDefault() can't stop the underlying page scroll —
+  // fine here since the map area doesn't scroll on its own anymore.
   const webWheelProps = Platform.OS === "web" ? {
     onWheel: (e: any) => zoomBy(e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP),
   } : {};
@@ -185,9 +229,6 @@ export default function MapScreen() {
     const uri = mapBackgroundUrl(currentCfg.pic_res);
     Image.getSize(uri, (w, h) => setImgSize({ w, h }), () => setImgSize({ w: 1000, h: 1000 }));
   }, [currentCfg?.pic_res]);
-
-  const containerWidth = Math.min(width - 32, 720);
-  const aspect = imgSize ? imgSize.w / imgSize.h : 1;
 
   return (
     <View style={styles.container}>
@@ -236,22 +277,14 @@ export default function MapScreen() {
       ) : !currentCfg ? (
         <View style={styles.center}><Text style={styles.empty}>{th ? "ไม่มีข้อมูลแมพ" : "No map data"}</Text></View>
       ) : (
-        <View style={{ flex: 1 }}>
-          <ScrollView
-            ref={hScrollRef}
-            horizontal
-            style={{ flex: 1 }}
-            contentContainerStyle={{ minWidth: "100%" }}
-            showsHorizontalScrollIndicator={false}
-            {...webWheelProps}
-          >
-            <ScrollView
-              ref={vScrollRef}
-              style={{ flex: 1 }}
-              contentContainerStyle={{ minHeight: "100%", alignItems: "center", justifyContent: "center", paddingVertical: 12 }}
-              showsVerticalScrollIndicator={false}
+        <View style={{ flex: 1, alignItems: "center", paddingVertical: 12 }}>
+          <View style={{ width: viewport.w, height: viewport.h }}>
+            <View
+              style={{ width: viewport.w, height: viewport.h, borderRadius: 12, overflow: "hidden", backgroundColor: "#0F1626" }}
+              {...webWheelProps}
+              {...panResponder.panHandlers}
             >
-              <View style={{ width: containerWidth * zoom, aspectRatio: aspect, backgroundColor: "#0F1626", borderRadius: 12, overflow: "hidden" }}>
+              <View style={{ position: "absolute", left: pan.x, top: pan.y, width: content.w, height: content.h }}>
                 <Image source={{ uri: mapBackgroundUrl(currentCfg.pic_res) }} style={StyleSheet.absoluteFill} resizeMode="contain" />
                 {visibleMarkers.map((m) => {
                   const { left, top } = worldToImageFraction(currentCfg, m.x, m.z);
@@ -271,29 +304,29 @@ export default function MapScreen() {
                   );
                 })}
               </View>
-            </ScrollView>
-          </ScrollView>
+            </View>
 
-          <View style={styles.zoomControls}>
-            <TouchableOpacity
-              style={[styles.zoomBtn, zoom >= MAX_ZOOM && styles.zoomBtnDisabled]}
-              onPress={() => zoomBy(ZOOM_STEP)}
-              disabled={zoom >= MAX_ZOOM}
-            >
-              <Text style={styles.zoomBtnText}>+</Text>
-            </TouchableOpacity>
-            <Text style={styles.zoomPct}>{Math.round(zoom * 100)}%</Text>
-            <TouchableOpacity
-              style={[styles.zoomBtn, zoom <= MIN_ZOOM && styles.zoomBtnDisabled]}
-              onPress={() => zoomBy(-ZOOM_STEP)}
-              disabled={zoom <= MIN_ZOOM}
-            >
-              <Text style={styles.zoomBtnText}>−</Text>
-            </TouchableOpacity>
+            <View style={styles.zoomControls}>
+              <TouchableOpacity
+                style={[styles.zoomBtn, zoom >= MAX_ZOOM && styles.zoomBtnDisabled]}
+                onPress={() => zoomBy(ZOOM_STEP)}
+                disabled={zoom >= MAX_ZOOM}
+              >
+                <Text style={styles.zoomBtnText}>+</Text>
+              </TouchableOpacity>
+              <Text style={styles.zoomPct}>{Math.round(zoom * 100)}%</Text>
+              <TouchableOpacity
+                style={[styles.zoomBtn, zoom <= MIN_ZOOM && styles.zoomBtnDisabled]}
+                onPress={() => zoomBy(-ZOOM_STEP)}
+                disabled={zoom <= MIN_ZOOM}
+              >
+                <Text style={styles.zoomBtnText}>−</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <Text style={styles.hint}>
-            {th ? "แตะจุดบนแมพเพื่อดูรายละเอียด • ใช้ปุ่ม +/− เพื่อซูมโฟกัส" : "Tap a point for details • use +/− to zoom in and pan"}
+            {th ? "ลากเพื่อเลื่อนแมพ • ใช้ปุ่ม +/− เพื่อซูมโฟกัส" : "Drag to pan • use +/− to zoom in and focus"}
           </Text>
         </View>
       )}
