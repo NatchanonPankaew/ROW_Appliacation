@@ -5,9 +5,10 @@
 // remaining base, then recompose. MBTI headwear ("ENFP头饰") is handled by rule.
 // Idempotent: only touches th-TH names that still contain Chinese.
 import { readFile, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
-const LIB = new URL("../public/data/sea/equipment/data/equipment_th-TH.json", import.meta.url).pathname;
-const MAP = new URL("./tw-equip-th.json", import.meta.url).pathname;
+const LIB = fileURLToPath(new URL("../public/data/sea/equipment/data/equipment_th-TH.json", import.meta.url));
+const MAP = fileURLToPath(new URL("./tw-equip-th.json", import.meta.url));
 const cjk = /[一-鿿]/;
 const ROYAL = "Royal 王·";           // "Royal 王·"
 const ROMAN = /[Ⅰ-Ⅸ]+$/;             // Ⅰ..Ⅸ

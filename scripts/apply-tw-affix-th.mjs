@@ -3,9 +3,10 @@
 // skeleton (#E69A15 -> #, numbers -> {i}) and are filled with each entry's own
 // numbers in order. Idempotent: only touches entries that still contain Chinese.
 import { readFile, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
-const LIB = new URL("../public/data/sea/affix-simulator/data/stunt_skill_library_th-TH.json", import.meta.url).pathname;
-const MAP = new URL("./tw-affix-th.json", import.meta.url).pathname;
+const LIB = fileURLToPath(new URL("../public/data/sea/affix-simulator/data/stunt_skill_library_th-TH.json", import.meta.url));
+const MAP = fileURLToPath(new URL("./tw-affix-th.json", import.meta.url));
 const cjk = /[一-鿿]/;
 const skel = (s) => { let i = 0; return s.replace(/#E69A15/g, "#").replace(/[0-9]+(\.[0-9]+)?/g, () => "{" + (i++) + "}"); };
 const nums = (s) => s.replace(/#E69A15/g, "#").match(/[0-9]+(\.[0-9]+)?/g) || [];

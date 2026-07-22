@@ -7,9 +7,10 @@
 // Taiwan text — apply-tw-equip-th.mjs then localizes their Chinese names to Thai.
 // Run after sync-data fetches the SEA equipment file. Idempotent.
 import { readFile, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
 const ORIGIN = "https://roworlddb.com";
-const DATA = new URL("../public/data/sea/equipment/data/", import.meta.url).pathname;
+const DATA = fileURLToPath(new URL("../public/data/sea/equipment/data/", import.meta.url));
 const LOCALES = ["en-US", "th-TH", "zh-TW"];
 // object-keyed libraries the items reference by id
 const OBJ_LIBS = ["attributes", "conditions", "stunts", "buffs", "affixes",

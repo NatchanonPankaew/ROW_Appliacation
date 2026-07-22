@@ -5,8 +5,9 @@
 // from the zh-TW file so the fill stays correct + idempotent. Job names follow
 // the official reveal (Divine Pride): Druid / Karnos / Alitea.
 import { readFile, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
-const DATA = new URL("../public/data/sea/skill-simulator/data/", import.meta.url).pathname;
+const DATA = fileURLToPath(new URL("../public/data/sea/skill-simulator/data/", import.meta.url));
 const JOBS = [901, 912, 913];
 const NUM = /\d+(?:\.\d+)?/g;
 const clean = (s) => String(s || "").replace(/<[^>]+>/g, "").trim();

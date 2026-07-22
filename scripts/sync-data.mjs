@@ -9,6 +9,7 @@
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { translateTwSkills } from "./translate-tw-skills.mjs";
 import { mergeTwDruid } from "./merge-tw-druid.mjs";
 import { translateTwDruid } from "./translate-tw-druid.mjs";
@@ -31,6 +32,9 @@ const PER_LOCALE = [
   "skill-simulator/data/skills_index_{loc}.json",
   "shop/data/shop_{loc}.json",
   "map-simulator/data/map_index_{loc}.json",
+  "map-simulator/data/map_monster_spawns_{loc}.json",
+  "map-simulator/data/interactive_placing_{loc}/_index.json",
+  "map-simulator/data/interactive_placing_{loc}/monster_cards.json",
   "apocalypse-simulator/data/apocalypse_planner_{loc}.json",
   "skill-simulator/data/engine_runes_{loc}.json",
   "affix-simulator/data/stunt_package_index_{loc}.json",
@@ -44,7 +48,7 @@ let okCount = 0;
 let failCount = 0;
 
 async function outPath(rel) {
-  const p = join(new URL(OUT).pathname, rel);
+  const p = join(fileURLToPath(OUT), rel);
   await mkdir(dirname(p), { recursive: true });
   return p;
 }

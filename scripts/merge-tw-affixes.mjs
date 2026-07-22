@@ -6,9 +6,10 @@
 // Thai/EN text. New (Taiwan-only) affixes come in with Taiwan text.
 // Run after sync-data fetches the SEA affix files. Idempotent.
 import { readFile, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
 const ORIGIN = "https://roworlddb.com";
-const DATA = new URL("../public/data/sea/affix-simulator/data/", import.meta.url).pathname;
+const DATA = fileURLToPath(new URL("../public/data/sea/affix-simulator/data/", import.meta.url));
 const LOCALES = ["en-US", "th-TH", "zh-TW"];
 
 async function fetchJSON(url) {

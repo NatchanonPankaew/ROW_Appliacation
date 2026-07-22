@@ -7,9 +7,10 @@
 // branch renders in the planner. Idempotent; run after sync-data fetches SEA
 // (the SEA index has no Druid, so re-adding it every sync is required).
 import { readFile, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
 const ORIGIN = "https://roworlddb.com"; // root host = Taiwan superset
-const DATA = new URL("../public/data/sea/skill-simulator/data/", import.meta.url).pathname;
+const DATA = fileURLToPath(new URL("../public/data/sea/skill-simulator/data/", import.meta.url));
 const LOCALES = ["en-US", "th-TH", "zh-TW"];
 const DRUID_IDS = [901, 912, 913];
 

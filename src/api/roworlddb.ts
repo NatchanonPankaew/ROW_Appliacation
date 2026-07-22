@@ -3,8 +3,8 @@
 // avoids CORS. Native builds have no origin, so set EXPO_PUBLIC_DATA_HOST to the
 // deployed site (e.g. https://mimir.pages.dev) to fetch the same files.
 const HOST = process.env.EXPO_PUBLIC_DATA_HOST ?? "";
-const BASE_DATA = HOST + "/data/sea";
-const BASE_IMG = HOST + "/media/images/";
+export const BASE_DATA = HOST + "/data/sea";
+export const BASE_IMG = HOST + "/media/images/";
 
 export type Kind =
   | "character"
@@ -181,7 +181,7 @@ function deobfuscate(buf: ArrayBuffer): string {
 // Native builds fetch cross-origin, so the same-origin gate on /data + /media
 // would 403 them — send the shared app key so the Worker lets them through.
 const APP_KEY = process.env.EXPO_PUBLIC_APP_KEY;
-async function getJSON(url: string) {
+export async function getJSON(url: string) {
   const res = await fetch(url, APP_KEY ? { headers: { "x-app-key": APP_KEY } } : undefined);
   if (!res.ok) throw new Error("HTTP " + res.status);
   return JSON.parse(deobfuscate(await res.arrayBuffer()));

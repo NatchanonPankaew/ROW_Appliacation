@@ -8,6 +8,7 @@ import CharacterScreen from "./src/screens/CharacterScreen";
 import SkillsScreen from "./src/screens/SkillsScreen";
 import SupportScreen from "./src/screens/SupportScreen";
 import GemSetScreen from "./src/screens/GemSetScreen";
+import MapScreen from "./src/screens/MapScreen";
 import { Kind } from "./src/api/roworlddb";
 
 // "support" (YouTube + donate) and "gemset" (enchant planner) are app-only
@@ -86,6 +87,8 @@ function Main() {
           <SupportScreen />
         ) : tab === "gemset" ? (
           <GemSetScreen />
+        ) : tab === "maps" ? (
+          <MapScreen />
         ) : (
           <BrowseScreen key={tab} kind={tab} />
         )}

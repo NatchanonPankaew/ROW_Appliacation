@@ -4,8 +4,9 @@
 // Chinese. § placeholders mark where each level's numbers go; the numbers are
 // always read from the zh-TW file so the fill stays correct + idempotent.
 import { readFile, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
-const DATA = new URL("../public/data/sea/skill-simulator/data/", import.meta.url).pathname;
+const DATA = fileURLToPath(new URL("../public/data/sea/skill-simulator/data/", import.meta.url));
 const JOBS = [422, 423, 432, 433, 722, 723];
 const NUM = /\d+(?:\.\d+)?/g;
 const clean = (s) => String(s || "").replace(/<[^>]+>/g, "").trim();

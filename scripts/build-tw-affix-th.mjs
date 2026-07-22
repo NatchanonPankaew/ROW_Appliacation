@@ -2,8 +2,9 @@
 // translations below. Keeps exact skeleton keys (never retyped) and validates
 // that each Thai template has the same {i} placeholder count as its skeleton.
 import { readFile, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
-const STUB = new URL("./tw-affix-th.json", import.meta.url).pathname;
+const STUB = fileURLToPath(new URL("./tw-affix-th.json", import.meta.url));
 
 // Thai names keyed by Chinese (35).
 const NAMES = {

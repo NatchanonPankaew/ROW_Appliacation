@@ -12,11 +12,12 @@
 import { mkdir, writeFile, readFile, access } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { readdir } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
 const ORIGIN = "https://roworlddb.com";
 const BASE_IMG = ORIGIN + "/media/images/";
-const DATA = new URL("../public/data/sea/", import.meta.url).pathname;
-const PUBLIC = new URL("../public/", import.meta.url).pathname;
+const DATA = fileURLToPath(new URL("../public/data/sea/", import.meta.url));
+const PUBLIC = fileURLToPath(new URL("../public/", import.meta.url));
 const LOCALES = ["en-US", "th-TH", "zh-TW"];
 
 // Rune element -> elemental-stone icon (mirrors ELEMENT_ICON in roworlddb.ts).
@@ -133,6 +134,28 @@ async function collect() {
         add(ic, ic ? "item/" + ic + ".webp" : undefined); // Taiwan stunt icons aren't in icon_paths
       })
     );
+
+    // map viewer: background art, spawn/quest marker icons, monster head
+    // portraits, and card-reward item icons (given as absolute iconPath).
+    const mapIdx = await readJSON(`map-simulator/data/map_index_${loc}.json`);
+    Object.values(mapIdx?.map_configs || {}).forEach((c) => c?.pic_res && add(undefined, `map/${c.pic_res}.webp`));
+    (mapIdx?.world_maps || []).forEach((m) => m?.pic_res && add(undefined, `map/${m.pic_res}.webp`));
+
+    const spawns = await readJSON(`map-simulator/data/map_monster_spawns_${loc}.json`);
+    Object.values(spawns?.views || {}).forEach((v) => (v?.monsters || []).forEach((m) => {
+      if (m?.icon) add(undefined, `map_mark/${m.icon}.webp`);
+      if (m?.image) add(undefined, `monster/${m.image}.webp`);
+    }));
+
+    const placingIdx = await readJSON(`map-simulator/data/interactive_placing_${loc}/_index.json`);
+    (placingIdx || []).forEach((e) => e?.typeIcon && add(undefined, `map_mark/${e.typeIcon}.webp`));
+
+    const cardPoints = await readJSON(`map-simulator/data/interactive_placing_${loc}/monster_cards.json`);
+    if (cardPoints?.meta?.typeIcon) add(undefined, `map_mark/${cardPoints.meta.typeIcon}.webp`);
+    Object.values(cardPoints?.data || {}).forEach((arr) => (arr || []).forEach((e) => {
+      if (e?.markIcon) add(undefined, `map_mark/${e.markIcon}.webp`);
+      (e?.rewardItems || []).forEach((r) => r?.iconPath && add(undefined, r.iconPath));
+    }));
 
     // per-job skill icons
     try {
