@@ -157,7 +157,7 @@ function MarkerModal({
 }
 
 export default function MapScreen() {
-  const { width } = useWindowDimensions();
+  const { width, height: windowHeight } = useWindowDimensions();
   const [locale, setLocale] = useState("th-TH");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -371,6 +371,14 @@ export default function MapScreen() {
         <View style={styles.center}><Text style={styles.empty}>{th ? "ไม่มีข้อมูลแมพ" : "No map data"}</Text></View>
       ) : (
         <View
+          // Re-keyed on window size so this subtree remounts (and onLayout
+          // re-fires) on resize — RN Web's onLayout only fires when *this*
+          // component's own render/props change, not when a parent's CSS
+          // flex box happens to resize the DOM around it (e.g. a mobile
+          // browser's address bar collapsing) — plain onLayout alone missed
+          // exactly that case, which is what left the zoom controls/hint
+          // text unreachable with body's overflow:hidden allowing no scroll.
+          key={`${Math.round(width)}x${Math.round(windowHeight)}`}
           style={{ flex: 1, alignItems: "center", paddingVertical: 12 }}
           onLayout={(e) => setMapAreaHeight(Math.max(120, e.nativeEvent.layout.height - 60))}
         >
