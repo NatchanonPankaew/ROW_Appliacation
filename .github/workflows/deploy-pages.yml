@@ -1,0 +1,45 @@
+name: Deploy to GitHub Pages
+
+# Backup host: Cloudflare (row-appliacation.natpoppy26.workers.dev) is the
+# primary deploy and auto-updates on push already. This publishes the same
+# build to GitHub Pages too, so there's a second working URL if Cloudflare
+# ever rate-limits or goes down.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync game dataset + images
+        run: |
+          npm run sync:data
+          npm run sync:images
+
+      - name: Build web export (GitHub Pages project-site subpath)
+        env:
+          EXPO_PUBLIC_DATA_HOST: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+        run: npm run build:web
+
+      - name: Rewrite root-absolute asset paths for the /repo-name/ subpath
+        run: node scripts/rewrite-pages-base.mjs "/${{ github.event.repository.name }}"
+
+      - name: Deploy dist/ to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
