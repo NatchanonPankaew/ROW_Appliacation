@@ -150,12 +150,18 @@ async function collect() {
     const placingIdx = await readJSON(`map-simulator/data/interactive_placing_${loc}/_index.json`);
     (placingIdx || []).forEach((e) => e?.typeIcon && add(undefined, `map_mark/${e.typeIcon}.webp`));
 
-    const cardPoints = await readJSON(`map-simulator/data/interactive_placing_${loc}/monster_cards.json`);
-    if (cardPoints?.meta?.typeIcon) add(undefined, `map_mark/${cardPoints.meta.typeIcon}.webp`);
-    Object.values(cardPoints?.data || {}).forEach((arr) => (arr || []).forEach((e) => {
-      if (e?.markIcon) add(undefined, `map_mark/${e.markIcon}.webp`);
-      (e?.rewardItems || []).forEach((r) => r?.iconPath && add(undefined, r.iconPath));
-    }));
+    // Every interactive_placing category the map viewer renders as a toggle
+    // layer (cards, chests, landmarks, kafra service...) — mark icon per
+    // entry, plus reward item icons for the ones that have quest rewards.
+    const PLACING_FILES = ["monster_cards", "expl_chest", "guard_chest", "monster_chest", "mystery_chest", "landmark_photography", "kafra_service"];
+    for (const file of PLACING_FILES) {
+      const placing = await readJSON(`map-simulator/data/interactive_placing_${loc}/${file}.json`);
+      if (placing?.meta?.typeIcon) add(undefined, `map_mark/${placing.meta.typeIcon}.webp`);
+      Object.values(placing?.data || {}).forEach((arr) => (arr || []).forEach((e) => {
+        if (e?.markIcon) add(undefined, `map_mark/${e.markIcon}.webp`);
+        (e?.rewardItems || []).forEach((r) => r?.iconPath && add(undefined, r.iconPath));
+      }));
+    }
 
     // per-job skill icons
     try {

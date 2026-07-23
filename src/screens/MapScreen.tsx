@@ -14,6 +14,12 @@ const LOCALES = ["en-US", "th-TH", "zh-TW"];
 const LAYER_DEFS: { key: MapLayer; th: string; en: string; color: string }[] = [
   { key: "card", th: "การ์ด", en: "Cards", color: "#E8B339" },
   { key: "recipe", th: "สูตรอาหาร", en: "Recipes", color: "#8B5E3C" },
+  { key: "expl_chest", th: "หีบสำรวจ", en: "Expl. Chest", color: "#4F8EE6" },
+  { key: "guard_chest", th: "หีบผู้พิทักษ์", en: "Guard Chest", color: "#607D8B" },
+  { key: "monster_chest", th: "หีบมอนสเตอร์", en: "Monster Chest", color: "#D2691E" },
+  { key: "mystery_chest", th: "หีบลึกลับ", en: "Mystery Chest", color: "#6A1B9A" },
+  { key: "landmark", th: "ถ่ายรูป", en: "Landmark", color: "#EC407A" },
+  { key: "kafra", th: "คาฟรา", en: "Kafra", color: "#26A69A" },
   { key: "mvp", th: "MVP", en: "MVP", color: "#A65CD6" },
   { key: "elite", th: "Elite", en: "Elite", color: "#E0533D" },
   { key: "mini", th: "Mini", en: "Mini", color: "#5DBB63" },
@@ -123,7 +129,11 @@ export default function MapScreen() {
   const [sceneId, setSceneId] = useState<number | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selectedMarker, setSelectedMarker] = useState<MapMarker | null>(null);
-  const [visible, setVisible] = useState<Record<MapLayer, boolean>>({ card: true, recipe: true, mvp: true, elite: true, mini: true });
+  const [visible, setVisible] = useState<Record<MapLayer, boolean>>(() => {
+    const v = {} as Record<MapLayer, boolean>;
+    LAYER_DEFS.forEach((l) => { v[l.key] = true; });
+    return v;
+  });
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
   const [zoom, setZoom] = useState(MIN_ZOOM);
   const [pan, setPan] = useState({ x: 0, y: 0 }); // top-left offset of content within the viewport, always <= 0
@@ -223,7 +233,8 @@ export default function MapScreen() {
   const visibleMarkers = currentMarkers.filter((m) => visible[m.layer]);
 
   const counts = useMemo(() => {
-    const c: Record<MapLayer, number> = { card: 0, recipe: 0, mvp: 0, elite: 0, mini: 0 };
+    const c = {} as Record<MapLayer, number>;
+    LAYER_DEFS.forEach((l) => { c[l.key] = 0; });
     currentMarkers.forEach((m) => { c[m.layer]++; });
     return c;
   }, [currentMarkers]);

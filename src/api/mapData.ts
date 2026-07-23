@@ -45,25 +45,33 @@ interface MonsterSpawnsRaw {
 
 export interface CardRewardItem { itemId: number; icon: string; iconPath: string; count: number; }
 
-export interface CardPointEntry {
-  id: number | string;
-  sceneId: number;
-  mapRegionName: string;
-  objectPos: [number, number, number];
-  markIcon: string;
-  questName?: string;
-  rewardItems: CardRewardItem[];
-}
-
-interface CardPointsRaw {
+// Shared shape of every interactive_placing/<file>.json (cards, chests,
+// landmarks, kafra service...): a locale-specific label/icon plus entries
+// grouped by region name.
+interface PlacingRaw {
   meta: { infoType: string; infoTypeEn: string; typeIcon: string };
   data: Record<string, any[]>;
 }
 
 // A single plottable point on a map: either a monster spawn spot, a card
-// collection point, or a chef recipe pickup, normalized to one shape so the
-// screen can render + filter them uniformly.
-export type MapLayer = "mvp" | "elite" | "mini" | "card" | "recipe";
+// collection point, a chef recipe pickup, or one of the exploration-reward
+// placing categories (chests / landmarks / kafra), normalized to one shape
+// so the screen can render + filter them uniformly.
+export type MapLayer =
+  | "mvp" | "elite" | "mini" | "card" | "recipe"
+  | "expl_chest" | "guard_chest" | "monster_chest" | "mystery_chest" | "landmark" | "kafra";
+
+// interactive_placing file name for each placing-based layer (everything
+// except the monster-spawn families and the hand-compiled recipe list).
+const PLACING_FILES: Partial<Record<MapLayer, string>> = {
+  card: "monster_cards",
+  expl_chest: "expl_chest",
+  guard_chest: "guard_chest",
+  monster_chest: "monster_chest",
+  mystery_chest: "mystery_chest",
+  landmark: "landmark_photography",
+  kafra: "kafra_service",
+};
 
 export interface MapMarker {
   layer: MapLayer;
@@ -123,18 +131,19 @@ async function fetchMonsterSpawnsRaw(locale: string): Promise<MonsterSpawnsRaw> 
   return d;
 }
 
-const _cardCache = new Map<string, CardPointsRaw>();
-async function fetchCardPointsRaw(locale: string): Promise<CardPointsRaw> {
-  const cached = _cardCache.get(locale);
+const _placingCache = new Map<string, PlacingRaw>();
+async function fetchPlacingRaw(locale: string, file: string): Promise<PlacingRaw> {
+  const key = locale + "/" + file;
+  const cached = _placingCache.get(key);
   if (cached) return cached;
   const d = await getJSON(
-    BASE_DATA + "/map-simulator/data/interactive_placing_" + locale + "/monster_cards.json"
-  );
-  _cardCache.set(locale, d);
+    BASE_DATA + "/map-simulator/data/interactive_placing_" + locale + "/" + file + ".json"
+  ).catch(() => ({ meta: { infoType: "", infoTypeEn: "", typeIcon: "" }, data: {} } as PlacingRaw));
+  _placingCache.set(key, d);
   return d;
 }
 
-// Group every monster spawn + card point by the upstream "view" a scene
+// Group every monster spawn + placing point by the upstream "view" a scene
 // belongs to, not by each marker's own raw scene_id. A view bundles a city
 // with its surrounding, seamlessly-connected field maps (e.g. Geffen's city +
 // its 6 gate/bank/wilds scenes all share one coordinate space and one view
@@ -142,9 +151,10 @@ async function fetchCardPointsRaw(locale: string): Promise<CardPointsRaw> {
 // background image rather than as separate maps per gate. Splitting by raw
 // scene_id would fragment one region into a dozen near-empty picker entries.
 export async function fetchMarkersByScene(locale: string): Promise<Map<number, MapMarker[]>> {
-  const [spawns, cards] = await Promise.all([
+  const placingLayers = Object.keys(PLACING_FILES) as MapLayer[];
+  const [spawns, ...placings] = await Promise.all([
     fetchMonsterSpawnsRaw(locale),
-    fetchCardPointsRaw(locale).catch(() => ({ meta: { infoType: "", infoTypeEn: "", typeIcon: "" }, data: {} } as CardPointsRaw)),
+    ...placingLayers.map((layer) => fetchPlacingRaw(locale, PLACING_FILES[layer]!)),
   ]);
 
   const byScene = new Map<number, MapMarker[]>();
@@ -155,8 +165,8 @@ export async function fetchMarkersByScene(locale: string): Promise<Map<number, M
   };
 
   // Every raw scene_id a view's markers ever reference belongs to that view's
-  // region (e.g. 10702-10709 -> 107 Geffen). Card points reuse this map so a
-  // card sitting in one of those same field scenes folds into the region too,
+  // region (e.g. 10702-10709 -> 107 Geffen). Placing points reuse this map so
+  // one sitting in one of those same field scenes folds into the region too,
   // instead of becoming its own near-empty picker entry.
   const sceneToView = new Map<number, number>();
 
@@ -179,23 +189,29 @@ export async function fetchMarkersByScene(locale: string): Promise<Map<number, M
     }
   }
 
-  for (const arr of Object.values(cards.data || {})) {
-    for (const e of arr || []) {
-      const rawSceneId = Number(e.sceneId);
-      const pos = e.objectPos;
-      if (!Number.isFinite(rawSceneId) || !Array.isArray(pos)) continue;
-      const sceneId = sceneToView.get(rawSceneId) ?? rawSceneId;
-      push(sceneId, {
-        layer: "card",
-        key: "card_" + e.id,
-        name: e.quest?.name || cards.meta?.infoTypeEn || "Card",
-        icon: e.markIcon || cards.meta?.typeIcon || "icon_map_mark_kpmw",
-        x: Number(pos[0]),
-        z: Number(pos[2]),
-        reward: e.rewardItems || e.quest?.rewardItems || [],
-      });
+  placingLayers.forEach((layer, idx) => {
+    const raw = placings[idx];
+    for (const arr of Object.values(raw.data || {})) {
+      for (const e of arr || []) {
+        const rawSceneId = Number(e.sceneId);
+        const pos = e.objectPos;
+        if (!Number.isFinite(rawSceneId) || !Array.isArray(pos)) continue;
+        const sceneId = sceneToView.get(rawSceneId) ?? rawSceneId;
+        const label = layer === "card"
+          ? (e.quest?.name || raw.meta?.infoTypeEn || "Card")
+          : (raw.meta?.infoType || raw.meta?.infoTypeEn || layer);
+        push(sceneId, {
+          layer,
+          key: layer + "_" + e.id,
+          name: label,
+          icon: e.markIcon || raw.meta?.typeIcon || "icon_map_mark_kpmw",
+          x: Number(pos[0]),
+          z: Number(pos[2]),
+          reward: e.rewardItems || e.quest?.rewardItems || [],
+        });
+      }
     }
-  }
+  });
 
   const th = locale === "th-TH";
   RECIPE_POINTS.forEach((r, i) => {
