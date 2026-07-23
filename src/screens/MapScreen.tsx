@@ -176,10 +176,20 @@ export default function MapScreen() {
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
   const [zoom, setZoom] = useState(MIN_ZOOM);
   const [pan, setPan] = useState({ x: 0, y: 0 }); // top-left offset of content within the viewport, always <= 0
+  const [mapAreaHeight, setMapAreaHeight] = useState<number | null>(null);
   const th = locale === "th-TH";
 
-  const containerWidth = Math.min(width - 32, 720);
   const aspect = imgSize ? imgSize.w / imgSize.h : 1;
+  // Fit the map inside whatever space is actually left below the header controls
+  // (measured via onLayout) as well as the screen width — on short viewports the
+  // header chips alone can leave less room than a width-only size would need,
+  // which used to push the zoom controls/hint text off the bottom of the screen
+  // with nothing to scroll them into view.
+  const containerWidth = Math.min(
+    width - 32,
+    720,
+    mapAreaHeight ? mapAreaHeight * aspect : Infinity
+  );
   const viewport = { w: containerWidth, h: containerWidth / aspect };
   const content = { w: containerWidth * zoom, h: (containerWidth * zoom) / aspect };
 
@@ -360,7 +370,10 @@ export default function MapScreen() {
       ) : !currentCfg ? (
         <View style={styles.center}><Text style={styles.empty}>{th ? "ไม่มีข้อมูลแมพ" : "No map data"}</Text></View>
       ) : (
-        <View style={{ flex: 1, alignItems: "center", paddingVertical: 12 }}>
+        <View
+          style={{ flex: 1, alignItems: "center", paddingVertical: 12 }}
+          onLayout={(e) => setMapAreaHeight(Math.max(120, e.nativeEvent.layout.height - 60))}
+        >
           <View style={{ width: viewport.w, height: viewport.h }}>
             <View
               style={{ width: viewport.w, height: viewport.h, borderRadius: 12, overflow: "hidden", backgroundColor: "#0F1626" }}
