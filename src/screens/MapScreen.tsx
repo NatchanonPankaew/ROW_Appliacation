@@ -127,7 +127,7 @@ function MarkerModal({
               </View>
             </View>
           )}
-          {marker.layer === "mystery_chest" && (
+          {marker.layer === "mystery_chest" && !marker.emoji && (
             <View style={styles.rewardRow}>
               <Text style={styles.rewardLabel}>
                 {th ? "จุดนี้อาจเป็น 1 ใน 6 แบบนี้ ขึ้นกับสภาพอากาศ" : "This point may be one of 6 variants, depending on weather"}

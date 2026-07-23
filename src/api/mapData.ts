@@ -3,6 +3,7 @@
 // scripts/sync-data.mjs). Coordinate math mirrors the site's own
 // worldXZToNaturalPixels() so markers land in the same spot as upstream.
 import { BASE_DATA, BASE_IMG, getJSON } from "./roworlddb";
+import { COMMUNITY_MYSTERY_CHESTS, COMMUNITY_MYSTERY_SCENE_IDS, MYSTERY_SUBTYPE_INFO } from "./communityMysteryChests";
 
 export interface WorldMapEntry {
   world_map_id: number;
@@ -197,6 +198,9 @@ export async function fetchMarkersByScene(locale: string): Promise<Map<number, M
         const pos = e.objectPos;
         if (!Number.isFinite(rawSceneId) || !Array.isArray(pos)) continue;
         const sceneId = sceneToView.get(rawSceneId) ?? rawSceneId;
+        // These scenes get precisely-typed points from COMMUNITY_MYSTERY_CHESTS
+        // below instead of roworlddb's untyped generic mystery_chest pins.
+        if (layer === "mystery_chest" && COMMUNITY_MYSTERY_SCENE_IDS.has(sceneId)) continue;
         const label = layer === "card"
           ? (e.quest?.name || raw.meta?.infoTypeEn || "Card")
           : (raw.meta?.infoType || raw.meta?.infoTypeEn || layer);
@@ -222,6 +226,18 @@ export async function fetchMarkersByScene(locale: string): Promise<Map<number, M
       emoji: "📜",
       x: r.x,
       z: r.z,
+    });
+  });
+
+  COMMUNITY_MYSTERY_CHESTS.forEach((c, i) => {
+    const info = MYSTERY_SUBTYPE_INFO[c.subtype];
+    push(c.sceneId, {
+      layer: "mystery_chest",
+      key: "mystery_" + i,
+      name: th ? info.th : info.en,
+      emoji: info.emoji,
+      x: c.x,
+      z: c.z,
     });
   });
 
