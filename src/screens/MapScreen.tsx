@@ -8,6 +8,9 @@ import {
   mapBackgroundUrl, rewardItemIconUrl, worldToImageFraction,
   MapConfig, MapMarker, MapLayer,
 } from "../api/mapData";
+import { loadJSON, saveJSON } from "../api/storage";
+
+const COLLECTED_STORAGE_KEY = "row_map_collected_points";
 
 const LOCALES = ["en-US", "th-TH", "zh-TW"];
 
@@ -89,8 +92,8 @@ function MapPickerModal({
 }
 
 function MarkerModal({
-  marker, locale, onClose,
-}: { marker: MapMarker; locale: string; onClose: () => void }) {
+  marker, locale, collected, onToggleCollected, onClose,
+}: { marker: MapMarker; locale: string; collected: boolean; onToggleCollected: () => void; onClose: () => void }) {
   const th = locale === "th-TH";
   const layerDef = LAYER_DEFS.find((l) => l.key === marker.layer)!;
   return (
@@ -137,6 +140,16 @@ function MarkerModal({
               ))}
             </View>
           )}
+          <TouchableOpacity
+            style={[styles.collectBtn, collected && styles.collectBtnOn]}
+            onPress={onToggleCollected}
+          >
+            <Text style={[styles.collectBtnText, collected && styles.collectBtnTextOn]}>
+              {collected
+                ? (th ? "✓ เก็บแล้ว (แตะเพื่อยกเลิก)" : "✓ Collected (tap to undo)")
+                : (th ? "ทำเครื่องหมายว่าเก็บแล้ว" : "Mark as collected")}
+            </Text>
+          </TouchableOpacity>
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
@@ -153,6 +166,8 @@ export default function MapScreen() {
   const [sceneId, setSceneId] = useState<number | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selectedMarker, setSelectedMarker] = useState<MapMarker | null>(null);
+  const [collected, setCollected] = useState<Record<string, true>>({});
+  const [hideCollected, setHideCollected] = useState(false);
   const [visible, setVisible] = useState<Record<MapLayer, boolean>>(() => {
     const v = {} as Record<MapLayer, boolean>;
     LAYER_DEFS.forEach((l) => { v[l.key] = true; });
@@ -241,6 +256,23 @@ export default function MapScreen() {
     }
   }, []);
 
+  // Collected-point history survives app restarts (localStorage on web,
+  // AsyncStorage on native) — loaded once, keyed by the marker's own stable
+  // key so it's independent of locale/map switches.
+  useEffect(() => {
+    loadJSON<Record<string, true>>(COLLECTED_STORAGE_KEY, {}).then(setCollected);
+  }, []);
+
+  const toggleCollected = useCallback((key: string) => {
+    setCollected((prev) => {
+      const next = { ...prev };
+      if (next[key]) delete next[key];
+      else next[key] = true;
+      saveJSON(COLLECTED_STORAGE_KEY, next);
+      return next;
+    });
+  }, []);
+
   useEffect(() => { load(locale); }, [locale, load]);
 
   const pickableMaps = useMemo<PickableMap[]>(() => {
@@ -254,14 +286,17 @@ export default function MapScreen() {
 
   const currentCfg = sceneId != null ? configs[String(sceneId)] : null;
   const currentMarkers = sceneId != null ? (markersByScene.get(sceneId) || []) : [];
-  const visibleMarkers = currentMarkers.filter((m) => visible[m.layer]);
+  const visibleMarkers = currentMarkers.filter((m) => visible[m.layer] && !(hideCollected && collected[m.key]));
 
   const counts = useMemo(() => {
-    const c = {} as Record<MapLayer, number>;
-    LAYER_DEFS.forEach((l) => { c[l.key] = 0; });
-    currentMarkers.forEach((m) => { c[m.layer]++; });
+    const c = {} as Record<MapLayer, { total: number; done: number }>;
+    LAYER_DEFS.forEach((l) => { c[l.key] = { total: 0, done: 0 }; });
+    currentMarkers.forEach((m) => {
+      c[m.layer].total++;
+      if (collected[m.key]) c[m.layer].done++;
+    });
     return c;
-  }, [currentMarkers]);
+  }, [currentMarkers, collected]);
 
   useEffect(() => {
     setImgSize(null);
@@ -293,17 +328,25 @@ export default function MapScreen() {
       <View style={styles.legendRow}>
         {LAYER_DEFS.map((l) => {
           const on = visible[l.key];
+          const c = counts[l.key];
           return (
             <TouchableOpacity key={l.key}
               style={[styles.legendChip, { borderColor: l.color }, on && { backgroundColor: l.color }]}
               onPress={() => setVisible((v) => ({ ...v, [l.key]: !v[l.key] }))}>
               <Text style={[styles.legendText, on && styles.legendTextOn, !on && { color: l.color }]}>
-                {(th ? l.th : l.en)} ({counts[l.key]})
+                {(th ? l.th : l.en)} ({c.done}/{c.total})
               </Text>
             </TouchableOpacity>
           );
         })}
       </View>
+
+      <TouchableOpacity style={styles.hideRow} onPress={() => setHideCollected((h) => !h)}>
+        <View style={[styles.checkbox, hideCollected && styles.checkboxOn]}>
+          {hideCollected && <Text style={styles.checkboxMark}>✓</Text>}
+        </View>
+        <Text style={styles.hideRowText}>{th ? "ซ่อนจุดที่เก็บแล้ว" : "Hide collected points"}</Text>
+      </TouchableOpacity>
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color="#E8B339" /></View>
@@ -330,10 +373,11 @@ export default function MapScreen() {
                   const { left, top } = worldToImageFraction(currentCfg, m.x, m.z);
                   if (left < -0.02 || left > 1.02 || top < -0.02 || top > 1.02) return null;
                   const layerColor = LAYER_DEFS.find((l) => l.key === m.layer)?.color || "#FFFFFF";
+                  const done = !!collected[m.key];
                   return (
                     <TouchableOpacity
                       key={m.key}
-                      style={[styles.marker, { left: `${left * 100}%`, top: `${top * 100}%` }]}
+                      style={[styles.marker, { left: `${left * 100}%`, top: `${top * 100}%` }, done && styles.markerDone]}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       onPress={() => setSelectedMarker(m)}
                     >
@@ -344,6 +388,11 @@ export default function MapScreen() {
                           <Image source={{ uri: mapMarkIconUrl(m.icon!) }} style={styles.markerIcon} resizeMode="contain" />
                         )}
                       </View>
+                      {done && (
+                        <View style={styles.markerDoneBadge}>
+                          <Text style={styles.markerDoneBadgeText}>✓</Text>
+                        </View>
+                      )}
                     </TouchableOpacity>
                   );
                 })}
@@ -385,7 +434,13 @@ export default function MapScreen() {
       )}
 
       {selectedMarker && (
-        <MarkerModal marker={selectedMarker} locale={locale} onClose={() => setSelectedMarker(null)} />
+        <MarkerModal
+          marker={selectedMarker}
+          locale={locale}
+          collected={!!collected[selectedMarker.key]}
+          onToggleCollected={() => toggleCollected(selectedMarker.key)}
+          onClose={() => setSelectedMarker(null)}
+        />
       )}
     </View>
   );
@@ -410,6 +465,13 @@ const styles = StyleSheet.create({
   legendText: { fontSize: 13, fontWeight: "bold" },
   legendTextOn: { color: "#FFFFFF" },
 
+  hideRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, marginTop: 8 },
+  checkbox: { width: 18, height: 18, borderRadius: 4, borderWidth: 1.5, borderColor: "#C9D6EE",
+    backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", marginRight: 8 },
+  checkboxOn: { backgroundColor: "#6E83E8", borderColor: "#6E83E8" },
+  checkboxMark: { color: "#FFFFFF", fontSize: 12, fontWeight: "bold" },
+  hideRowText: { color: "#5A6781", fontSize: 13, fontWeight: "600" },
+
   zoomControls: { position: "absolute", right: 16, bottom: 16, alignItems: "center",
     backgroundColor: "#FFFFFF", borderRadius: 12, borderWidth: 1, borderColor: "#DCE6F4",
     paddingVertical: 4, shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 4,
@@ -425,6 +487,10 @@ const styles = StyleSheet.create({
     shadowColor: "#000", shadowOpacity: 0.35, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 3 },
   markerIcon: { width: 18, height: 18 },
   markerEmoji: { fontSize: 13, lineHeight: 16 },
+  markerDone: { opacity: 0.4 },
+  markerDoneBadge: { position: "absolute", top: -4, right: -4, width: 14, height: 14, borderRadius: 999,
+    backgroundColor: "#3FA35A", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#FFFFFF" },
+  markerDoneBadgeText: { color: "#FFFFFF", fontSize: 9, fontWeight: "bold", lineHeight: 10 },
   hint: { color: "#8A97AD", fontSize: 12, marginTop: 8 },
 
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
@@ -460,4 +526,10 @@ const styles = StyleSheet.create({
   rewardIcon: { width: 32, height: 32, marginRight: 4 },
   rewardCount: { color: "#5A6781", fontSize: 12, fontWeight: "bold" },
   mysteryTypeLine: { color: "#5A6781", fontSize: 13, lineHeight: 20, marginTop: 4 },
+
+  collectBtn: { marginTop: 14, paddingVertical: 12, borderRadius: 10, alignItems: "center",
+    backgroundColor: "#F1F6FC", borderWidth: 1.5, borderColor: "#C9D6EE" },
+  collectBtnOn: { backgroundColor: "#E9F7EE", borderColor: "#3FA35A" },
+  collectBtnText: { color: "#5A6781", fontSize: 14, fontWeight: "bold" },
+  collectBtnTextOn: { color: "#2E7D46" },
 });
