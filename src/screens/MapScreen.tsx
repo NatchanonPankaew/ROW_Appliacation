@@ -27,6 +27,20 @@ const LAYER_DEFS: { key: MapLayer; th: string; en: string; color: string }[] = [
 
 interface PickableMap { sceneId: number; name: string; picRes: string; }
 
+// Mystery chests come in 6 known variants gated by weather/condition, but
+// roworlddb's data has no per-point type tag (community guides only show
+// them via screenshots, not machine-readable coordinates) — so rather than
+// guess which of the 91 points is which, the modal just explains the 6
+// possibilities. See forum.gamer.com.tw/C.php?bsn=83054&snA=1017.
+const MYSTERY_CHEST_TYPES = [
+  { emoji: "☀️", th: "อุปกรณ์รับแดด — โผล่เฉพาะตอนแดดออก ต้องชาร์จพลังแดดก่อน", en: "Sunlight device — appears only in sunny weather, needs charging first" },
+  { emoji: "❄️", th: "กวาดหิมะ — หัวหิมะโผล่ตอนหิมะตก", en: "Snow clearing — snowman head appears in snowy weather" },
+  { emoji: "💧", th: "กล่องลอยน้ำ — โผล่ตอนฝนตก เก็บไม่ทันจะแตกหาย", en: "Water balloon box — appears in rain, pops if not collected in time" },
+  { emoji: "🏔️", th: "หีบที่สูง — อยู่บนที่ไม่ใช่พื้นราบ", en: "High place — sits somewhere off the ground" },
+  { emoji: "🦋", th: "ผีเสื้อลึกลับ — เดินตามผีเสื้อจนสุดทาง", en: "Mystery butterfly — follow it to the end" },
+  { emoji: "👹", th: "มอนสเตอร์เฝ้าหีบ — ฆ่ามอนที่เฝ้าก่อนถึงจะเปิดได้", en: "Guardian monster — defeat the guard to open it" },
+];
+
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.5;
@@ -111,6 +125,16 @@ function MarkerModal({
                   </View>
                 ))}
               </View>
+            </View>
+          )}
+          {marker.layer === "mystery_chest" && (
+            <View style={styles.rewardRow}>
+              <Text style={styles.rewardLabel}>
+                {th ? "จุดนี้อาจเป็น 1 ใน 6 แบบนี้ ขึ้นกับสภาพอากาศ" : "This point may be one of 6 variants, depending on weather"}
+              </Text>
+              {MYSTERY_CHEST_TYPES.map((t, i) => (
+                <Text key={i} style={styles.mysteryTypeLine}>{t.emoji}  {th ? t.th : t.en}</Text>
+              ))}
             </View>
           )}
         </TouchableOpacity>
@@ -435,4 +459,5 @@ const styles = StyleSheet.create({
   rewardItem: { flexDirection: "row", alignItems: "center", marginRight: 12, marginBottom: 6 },
   rewardIcon: { width: 32, height: 32, marginRight: 4 },
   rewardCount: { color: "#5A6781", fontSize: 12, fontWeight: "bold" },
+  mysteryTypeLine: { color: "#5A6781", fontSize: 13, lineHeight: 20, marginTop: 4 },
 });
