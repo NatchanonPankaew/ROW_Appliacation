@@ -153,7 +153,7 @@ async function collect() {
     // Every interactive_placing category the map viewer renders as a toggle
     // layer (cards, chests, landmarks, kafra service...) — mark icon per
     // entry, plus reward item icons for the ones that have quest rewards.
-    const PLACING_FILES = ["monster_cards", "expl_chest", "guard_chest", "monster_chest", "mystery_chest", "landmark_photography", "kafra_service"];
+    const PLACING_FILES = ["monster_cards", "expl_chest", "guard_chest", "monster_chest", "mystery_chest", "landmark_photography", "kafra_service", "cooking_recipes", "jd", "private_chef", "quest_mark_008", "rw_quest"];
     for (const file of PLACING_FILES) {
       const placing = await readJSON(`map-simulator/data/interactive_placing_${loc}/${file}.json`);
       if (placing?.meta?.typeIcon) add(undefined, `map_mark/${placing.meta.typeIcon}.webp`);

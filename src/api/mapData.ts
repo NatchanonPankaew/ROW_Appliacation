@@ -3,7 +3,7 @@
 // scripts/sync-data.mjs). Coordinate math mirrors the site's own
 // worldXZToNaturalPixels() so markers land in the same spot as upstream.
 import { BASE_DATA, BASE_IMG, getJSON } from "./roworlddb";
-import { COMMUNITY_MYSTERY_CHESTS, COMMUNITY_MYSTERY_SCENE_IDS, MYSTERY_SUBTYPE_INFO } from "./communityMysteryChests";
+import { COMMUNITY_MYSTERY_CHESTS, MYSTERY_SUBTYPE_INFO, CommunityChestPoint } from "./communityMysteryChests";
 
 export interface WorldMapEntry {
   world_map_id: number;
@@ -60,18 +60,24 @@ interface PlacingRaw {
 // so the screen can render + filter them uniformly.
 export type MapLayer =
   | "mvp" | "elite" | "mini" | "card" | "recipe"
-  | "expl_chest" | "guard_chest" | "monster_chest" | "mystery_chest" | "landmark" | "kafra";
+  | "expl_chest" | "guard_chest" | "monster_chest" | "mystery_chest" | "landmark" | "kafra"
+  | "observation" | "private_chef" | "quest_mark" | "rw_quest";
 
 // interactive_placing file name for each placing-based layer (everything
-// except the monster-spawn families and the hand-compiled recipe list).
+// except the monster-spawn families).
 const PLACING_FILES: Partial<Record<MapLayer, string>> = {
   card: "monster_cards",
+  recipe: "cooking_recipes",
   expl_chest: "expl_chest",
   guard_chest: "guard_chest",
   monster_chest: "monster_chest",
   mystery_chest: "mystery_chest",
   landmark: "landmark_photography",
   kafra: "kafra_service",
+  observation: "jd",
+  private_chef: "private_chef",
+  quest_mark: "quest_mark_008",
+  rw_quest: "rw_quest",
 };
 
 export interface MapMarker {
@@ -84,36 +90,9 @@ export interface MapMarker {
   x: number;             // world X
   z: number;             // world Z
   reward?: CardRewardItem[];
-  reqLevel?: number;     // base level required to turn in/collect (card quests only)
+  reqLevel?: number;     // base level required to turn in/collect (card/recipe/quest entries)
+  speciesKey?: string;   // stable per-species id (mvp/elite/mini only) for the breakdown list
 }
-
-// Chef recipe pickup points. roworlddb.com's own map tool doesn't track this
-// collectible (only cards + monster spawns), so this list is hand-compiled
-// from the community exploration write-up for "RO: World Tour" (仙境傳說：世界之旅) —
-// https://forum.gamer.com.tw/C.php?bsn=83054&snA=1890 ("食譜＆卡片之神探索整理",
-// 17 recipes / 40 cards / 57 points total; the 40 cards match monster_cards.json
-// exactly, confirming the recipe list is the missing complement). Coordinates
-// are the community's raw (X,Y) which is the game's worldX/worldZ convention.
-interface RecipePoint { sceneId: number; nameTh: string; nameEn: string; x: number; z: number; }
-const RECIPE_POINTS: RecipePoint[] = [
-  { sceneId: 70077, nameTh: "สูตรพายฟักทอง", nameEn: "Pumpkin Pie Recipe", x: 184, z: 181 },
-  { sceneId: 104, nameTh: "สลัดเขียว", nameEn: "Green Salad", x: 144, z: 96 },
-  { sceneId: 104, nameTh: "สูตรอาหาร STR", nameEn: "Strength Recipe", x: 58, z: 157 },
-  { sceneId: 104, nameTh: "สูตรอาหาร AGI", nameEn: "Agility Recipe", x: 58, z: 162 },
-  { sceneId: 101, nameTh: "ซุปปลาสีฟ้า", nameEn: "Blue Fish Soup", x: 686, z: 852 },
-  { sceneId: 101, nameTh: "สูตรไวน์องุ่น", nameEn: "Wine Recipe", x: 428, z: 428 },
-  { sceneId: 101, nameTh: "เยลลี่เชอร์รี่", nameEn: "Cherry Jelly", x: 575, z: 313 },
-  { sceneId: 107, nameTh: "สูตรซุปเวทมนตร์สด", nameEn: "Fresh Mana Soup Recipe", x: 643, z: 318 },
-  { sceneId: 107, nameTh: "อาหารบำรุงธาตุ VIT", nameEn: "Vitality Dish", x: 132, z: 74 },
-  { sceneId: 106, nameTh: "สูตรซุปเวทมนตร์ข้น", nameEn: "Thick Mana Soup Recipe", x: 198, z: 129 },
-  { sceneId: 106, nameTh: "สูตรซุปหนวดปลาหมึก", nameEn: "Squid Tentacle Soup Recipe", x: 99, z: 99 },
-  { sceneId: 102, nameTh: "โจ๊กปูม่วง", nameEn: "Purple Crab Porridge", x: 458, z: 462 },
-  { sceneId: 102, nameTh: "สูตรอาหาร STR ขั้นสูงสุด", nameEn: "Premium Strength Recipe", x: 137, z: 590 },
-  { sceneId: 103, nameTh: "สูตรเค้กมันเทศ", nameEn: "Sweet Potato Cake Recipe", x: 510, z: 408 },
-  { sceneId: 103, nameTh: "สูตรหม้อไฟปลาแดง", nameEn: "Red Fish Stew Recipe", x: 240, z: 425 },
-  { sceneId: 103, nameTh: "ซุปอาหารทะเลแม่น้ำ", nameEn: "River Seafood Soup", x: 529, z: 548 },
-  { sceneId: 103, nameTh: "พุดดิ้งแอปเปิ้ล", nameEn: "Apple Pudding", x: 682, z: 517 },
-];
 
 const _mapIndexCache = new Map<string, MapIndex>();
 export async function fetchMapIndex(locale: string): Promise<MapIndex> {
@@ -224,10 +203,42 @@ export async function fetchMarkersByScene(locale: string): Promise<Map<number, M
           portrait: group.image,
           x: mk.x,
           z: mk.z,
+          speciesKey: group.key,
         });
       });
     }
   }
+
+  // Community mystery-chest data (see communityMysteryChests.ts) pins each
+  // chest with its confirmed weather-based sub-type, but its point count
+  // doesn't match roworlddb's own mystery_chest.json 1:1 for every region
+  // (calibration drift), so it's used to *enrich* the authoritative points
+  // (nearest match within 20 world units) rather than replace them — that
+  // keeps the on-screen count identical to the live site while still telling
+  // players the specific type wherever a confident match exists.
+  const communityByScene = new Map<number, { subtype: CommunityChestPoint["subtype"]; x: number; z: number; used: boolean }[]>();
+  for (const c of COMMUNITY_MYSTERY_CHESTS) {
+    const arr = communityByScene.get(c.sceneId);
+    const entry = { ...c, used: false };
+    if (arr) arr.push(entry);
+    else communityByScene.set(c.sceneId, [entry]);
+  }
+  const MYSTERY_MATCH_RADIUS = 20;
+  const findMysteryMatch = (sceneId: number, x: number, z: number) => {
+    const cands = communityByScene.get(sceneId);
+    if (!cands) return null;
+    let best: (typeof cands)[number] | null = null;
+    let bestDist = MYSTERY_MATCH_RADIUS;
+    for (const c of cands) {
+      if (c.used) continue;
+      const d = Math.hypot(c.x - x, c.z - z);
+      if (d < bestDist) { bestDist = d; best = c; }
+    }
+    if (best) best.used = true;
+    return best;
+  };
+
+  const th = locale === "th-TH";
 
   placingLayers.forEach((layer, layerIdx) => {
     const raw = placings[layerIdx];
@@ -236,52 +247,35 @@ export async function fetchMarkersByScene(locale: string): Promise<Map<number, M
         const rawSceneId = Number(e.sceneId);
         const pos = e.objectPos;
         if (!Number.isFinite(rawSceneId) || !Array.isArray(pos)) continue;
+        const x = Number(pos[0]), z = Number(pos[2]);
+        if (x === 0 && z === 0) continue; // disabled/placeholder entries
         const sceneId =
           nameToScene.get(e.mapRegionName) ??
           sceneToView.get(rawSceneId) ??
           (validSceneIds.has(rawSceneId) ? rawSceneId : resolveUnknownScene(rawSceneId));
-        // These scenes get precisely-typed points from COMMUNITY_MYSTERY_CHESTS
-        // below instead of roworlddb's untyped generic mystery_chest pins.
-        if (layer === "mystery_chest" && COMMUNITY_MYSTERY_SCENE_IDS.has(sceneId)) continue;
-        const label = layer === "card"
-          ? (e.quest?.name || raw.meta?.infoTypeEn || "Card")
-          : (raw.meta?.infoType || raw.meta?.infoTypeEn || layer);
+        const label =
+          layer === "card" || layer === "quest_mark" || layer === "rw_quest"
+            ? (e.quest?.name || raw.meta?.infoTypeEn || "Card")
+            : layer === "recipe"
+            ? (e.cookingRecipe?.[1] || raw.meta?.infoTypeEn || "Recipe")
+            : layer === "private_chef"
+            ? (e.cookingStarter?.[1] || raw.meta?.infoTypeEn || "Private Chef")
+            : (raw.meta?.infoType || raw.meta?.infoTypeEn || layer);
+        const match = layer === "mystery_chest" ? findMysteryMatch(sceneId, x, z) : null;
+        const info = match ? MYSTERY_SUBTYPE_INFO[match.subtype] : null;
         push(sceneId, {
           layer,
           key: layer + "_" + e.id,
-          name: label,
-          icon: e.markIcon || raw.meta?.typeIcon || "icon_map_mark_kpmw",
-          x: Number(pos[0]),
-          z: Number(pos[2]),
+          name: info ? (th ? info.th : info.en) : label,
+          icon: info ? undefined : e.markIcon || raw.meta?.typeIcon || "icon_map_mark_kpmw",
+          emoji: info?.emoji,
+          x,
+          z,
           reward: e.rewardItems || e.quest?.rewardItems || [],
-          reqLevel: e.quest?.requirements?.baseLevel,
+          reqLevel: e.quest?.requirements?.baseLevel ?? e.cookingRequirements?.baseLevel,
         });
       }
     }
-  });
-
-  const th = locale === "th-TH";
-  RECIPE_POINTS.forEach((r, i) => {
-    push(r.sceneId, {
-      layer: "recipe",
-      key: "recipe_" + i,
-      name: th ? r.nameTh : r.nameEn,
-      emoji: "📜",
-      x: r.x,
-      z: r.z,
-    });
-  });
-
-  COMMUNITY_MYSTERY_CHESTS.forEach((c, i) => {
-    const info = MYSTERY_SUBTYPE_INFO[c.subtype];
-    push(c.sceneId, {
-      layer: "mystery_chest",
-      key: "mystery_" + i,
-      name: th ? info.th : info.en,
-      emoji: info.emoji,
-      x: c.x,
-      z: c.z,
-    });
   });
 
   return byScene;

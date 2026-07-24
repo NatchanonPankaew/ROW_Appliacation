@@ -23,10 +23,21 @@ const LAYER_DEFS: { key: MapLayer; th: string; en: string; color: string }[] = [
   { key: "mystery_chest", th: "หีบลึกลับ", en: "Mystery Chest", color: "#6A1B9A" },
   { key: "landmark", th: "ถ่ายรูป", en: "Landmark", color: "#EC407A" },
   { key: "kafra", th: "คาฟรา", en: "Kafra", color: "#26A69A" },
+  { key: "observation", th: "จุดสังเกต", en: "Observation Point", color: "#FFA000" },
+  { key: "private_chef", th: "เชฟส่วนตัว", en: "Private Chef", color: "#C2185B" },
+  { key: "quest_mark", th: "เควสเรื่องราว", en: "Story Quest", color: "#7CB342" },
+  { key: "rw_quest", th: "เควสภารกิจ", en: "World Tour Quest", color: "#00897B" },
   { key: "mvp", th: "MVP", en: "MVP", color: "#A65CD6" },
   { key: "elite", th: "Elite", en: "Elite", color: "#E0533D" },
   { key: "mini", th: "Mini", en: "Mini", color: "#5DBB63" },
 ];
+
+// These 3 layers lump every distinct monster species under one combined
+// count — tapping the chip's expand button opens a per-species breakdown
+// (own icon/name/count, individually toggleable) instead of one opaque total.
+const SPECIES_LAYERS: MapLayer[] = ["mvp", "elite", "mini"];
+
+interface SpeciesEntry { key: string; name: string; icon?: string; portrait?: string; total: number; done: number; }
 
 interface PickableMap { sceneId: number; name: string; picRes: string; }
 
@@ -84,6 +95,53 @@ function MapPickerModal({
               </TouchableOpacity>
             )}
             ListEmptyComponent={<Text style={styles.empty}>{th ? "ไม่พบแมพ" : "No maps found"}</Text>}
+          />
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function SpeciesBreakdownModal({
+  layer, locale, species, hiddenSpecies, onToggleSpecies, onClose,
+}: {
+  layer: MapLayer; locale: string; species: Map<string, SpeciesEntry>;
+  hiddenSpecies: Record<string, boolean>; onToggleSpecies: (key: string) => void; onClose: () => void;
+}) {
+  const th = locale === "th-TH";
+  const layerDef = LAYER_DEFS.find((l) => l.key === layer)!;
+  const list = useMemo(() => [...species.values()].sort((a, b) => a.name.localeCompare(b.name)), [species]);
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalBg}>
+        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
+        <View style={styles.pickerCard}>
+          <View style={styles.modalHandle} />
+          <Text style={styles.pickerTitle}>{th ? layerDef.th : layerDef.en}</Text>
+          <FlatList
+            data={list}
+            keyExtractor={(s) => s.key}
+            style={{ marginTop: 8 }}
+            renderItem={({ item }) => {
+              const hidden = !!hiddenSpecies[item.key];
+              return (
+                <TouchableOpacity style={styles.pickerRow} onPress={() => onToggleSpecies(item.key)}>
+                  {item.portrait ? (
+                    <Image source={{ uri: monsterPortraitUrl(item.portrait) }} style={styles.pickerThumb} resizeMode="contain" />
+                  ) : item.icon ? (
+                    <Image source={{ uri: mapMarkIconUrl(item.icon) }} style={styles.pickerThumb} resizeMode="contain" />
+                  ) : (
+                    <View style={styles.pickerThumb} />
+                  )}
+                  <Text style={[styles.pickerRowText, hidden && styles.pickerRowTextOff]} numberOfLines={1}>{item.name}</Text>
+                  <Text style={styles.speciesCount}>{item.done}/{item.total}</Text>
+                  <View style={[styles.checkbox, !hidden && styles.checkboxOn]}>
+                    {!hidden && <Text style={styles.checkboxMark}>✓</Text>}
+                  </View>
+                </TouchableOpacity>
+              );
+            }}
           />
         </View>
       </View>
@@ -175,6 +233,8 @@ export default function MapScreen() {
   const [selectedMarker, setSelectedMarker] = useState<MapMarker | null>(null);
   const [collected, setCollected] = useState<Record<string, true>>({});
   const [hideCollected, setHideCollected] = useState(false);
+  const [speciesPanelLayer, setSpeciesPanelLayer] = useState<MapLayer | null>(null);
+  const [hiddenSpecies, setHiddenSpecies] = useState<Record<string, boolean>>({});
   const [visible, setVisible] = useState<Record<MapLayer, boolean>>(() => {
     const v = {} as Record<MapLayer, boolean>;
     LAYER_DEFS.forEach((l) => { v[l.key] = true; });
@@ -184,17 +244,20 @@ export default function MapScreen() {
   const [zoom, setZoom] = useState(MIN_ZOOM);
   const [pan, setPan] = useState({ x: 0, y: 0 }); // top-left offset of content within the viewport, always <= 0
   const [mapAreaHeight, setMapAreaHeight] = useState<number | null>(null);
+  const [contentWidth, setContentWidth] = useState<number | null>(null);
   const th = locale === "th-TH";
 
-  // Viewport is now a wide rectangle sized independently in each dimension —
-  // full available width, and whatever vertical space onLayout says is left
-  // — rather than being forced to match the map image's own aspect ratio.
+  // Viewport is a rectangle sized independently in each dimension — the
+  // screen's own actual rendered width (not the raw window width: on wide
+  // desktops the app shell centers content in a capped ~1200px column, so
+  // using the full window width here would overflow it) and whatever
+  // vertical space onLayout says is left below the header/legend rows.
   // The image still keeps its true aspect (never distorted): at zoom=1 it's
   // scaled with a "cover" fit (like CSS object-fit: cover) so it fills the
-  // wide box edge-to-edge, cropped top/bottom or sides as needed; the pan
+  // box edge-to-edge, cropped top/bottom or sides as needed; the pan
   // feature already built lets you reach whatever falls outside the box.
   const natW = imgSize?.w ?? 1000, natH = imgSize?.h ?? 1000;
-  const viewportW = width - 32;
+  const viewportW = (contentWidth ?? width) - 32;
   const viewportH = mapAreaHeight ?? viewportW; // falls back before first onLayout
   const viewport = { w: viewportW, h: viewportH };
   const baseScale = Math.max(viewportW / natW, viewportH / natH);
@@ -243,13 +306,37 @@ export default function MapScreen() {
 
   // Drag-to-pan: only claim the gesture once the touch/mouse actually moves
   // (onStartShouldSet = false) so marker taps underneath still fire normally.
+  // A second finger switches the same gesture to pinch-to-zoom instead of pan.
+  const zoomRef = useRef(zoom);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   const dragStart = useRef({ x: 0, y: 0 });
+  const pinchStart = useRef<{ dist: number; zoom: number } | null>(null);
+  const touchDist = (touches: { pageX: number; pageY: number }[]) => {
+    const [a, b] = touches;
+    return Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
+  };
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_evt, g) => Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4,
-      onPanResponderGrant: () => { dragStart.current = { ...panRef.current }; },
-      onPanResponderMove: (_evt, g) => {
+      onPanResponderGrant: (evt) => {
+        dragStart.current = { ...panRef.current };
+        const touches = evt.nativeEvent.touches;
+        pinchStart.current = touches.length === 2 ? { dist: touchDist(touches), zoom: zoomRef.current } : null;
+      },
+      onPanResponderMove: (evt, g) => {
+        const touches = evt.nativeEvent.touches;
+        if (touches.length === 2) {
+          if (!pinchStart.current) pinchStart.current = { dist: touchDist(touches), zoom: zoomRef.current };
+          const scale = touchDist(touches) / pinchStart.current.dist;
+          const nz = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round(pinchStart.current.zoom * scale * 20) / 20));
+          setZoom(nz);
+          const { viewport: v } = sizeRef.current;
+          const newW = natW * baseScale * nz, newH = natH * baseScale * nz;
+          setPan((p) => clampPan(p, { w: newW, h: newH }, v));
+          return;
+        }
+        pinchStart.current = null;
         const { content: c, viewport: v } = sizeRef.current;
         setPan(clampPan({ x: dragStart.current.x + g.dx, y: dragStart.current.y + g.dy }, c, v));
       },
@@ -308,7 +395,9 @@ export default function MapScreen() {
 
   const currentCfg = sceneId != null ? configs[String(sceneId)] : null;
   const currentMarkers = sceneId != null ? (markersByScene.get(sceneId) || []) : [];
-  const visibleMarkers = currentMarkers.filter((m) => visible[m.layer] && !(hideCollected && collected[m.key]));
+  const visibleMarkers = currentMarkers.filter((m) =>
+    visible[m.layer] && !(m.speciesKey && hiddenSpecies[m.speciesKey]) && !(hideCollected && collected[m.key])
+  );
 
   const counts = useMemo(() => {
     const c = {} as Record<MapLayer, { total: number; done: number }>;
@@ -320,6 +409,26 @@ export default function MapScreen() {
     return c;
   }, [currentMarkers, collected]);
 
+  // Per-species breakdown for mvp/elite/mini: distinct monster identities
+  // within each of those 3 layers, so a chip's expand button can list them
+  // individually instead of one combined count.
+  const speciesByLayer = useMemo(() => {
+    const out = new Map<MapLayer, Map<string, SpeciesEntry>>();
+    currentMarkers.forEach((m) => {
+      if (!m.speciesKey) return;
+      let layerMap = out.get(m.layer);
+      if (!layerMap) { layerMap = new Map(); out.set(m.layer, layerMap); }
+      const cur = layerMap.get(m.speciesKey);
+      if (cur) { cur.total++; if (collected[m.key]) cur.done++; }
+      else layerMap.set(m.speciesKey, { key: m.speciesKey, name: m.name, icon: m.icon, portrait: m.portrait, total: 1, done: collected[m.key] ? 1 : 0 });
+    });
+    return out;
+  }, [currentMarkers, collected]);
+
+  // Species hide-state is per-map (keys aren't unique across different
+  // monster spawn tables), so reset it whenever the selected map changes.
+  useEffect(() => { setHiddenSpecies({}); }, [sceneId]);
+
   useEffect(() => {
     setImgSize(null);
     if (!currentCfg) return;
@@ -328,7 +437,7 @@ export default function MapScreen() {
   }, [currentCfg?.pic_res]);
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onLayout={(e) => setContentWidth(e.nativeEvent.layout.width)}>
       <View style={styles.localeRow}>
         {LOCALES.map((l) => (
           <TouchableOpacity key={l} onPress={() => setLocale(l)}
@@ -356,14 +465,24 @@ export default function MapScreen() {
         {LAYER_DEFS.map((l) => {
           const on = visible[l.key];
           const c = counts[l.key];
+          const canExpand = SPECIES_LAYERS.includes(l.key) && c.total > 0;
           return (
-            <TouchableOpacity key={l.key}
-              style={[styles.legendChip, { borderColor: l.color }, on && { backgroundColor: l.color }]}
-              onPress={() => setVisible((v) => ({ ...v, [l.key]: !v[l.key] }))}>
-              <Text style={[styles.legendText, on && styles.legendTextOn, !on && { color: l.color }]}>
-                {(th ? l.th : l.en)} ({c.done}/{c.total})
-              </Text>
-            </TouchableOpacity>
+            <View key={l.key} style={[styles.legendChip, { borderColor: l.color }, on && { backgroundColor: l.color }]}>
+              <TouchableOpacity onPress={() => setVisible((v) => ({ ...v, [l.key]: !v[l.key] }))}>
+                <Text style={[styles.legendText, on && styles.legendTextOn, !on && { color: l.color }]}>
+                  {(th ? l.th : l.en)} ({c.done}/{c.total})
+                </Text>
+              </TouchableOpacity>
+              {canExpand && (
+                <TouchableOpacity
+                  style={styles.legendExpandBtn}
+                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                  onPress={() => setSpeciesPanelLayer(l.key)}
+                >
+                  <Text style={[styles.legendExpandIcon, on && styles.legendTextOn, !on && { color: l.color }]}>▤</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           );
         })}
       </ScrollView>
@@ -471,6 +590,17 @@ export default function MapScreen() {
         />
       )}
 
+      {speciesPanelLayer && (
+        <SpeciesBreakdownModal
+          layer={speciesPanelLayer}
+          locale={locale}
+          species={speciesByLayer.get(speciesPanelLayer) || new Map()}
+          hiddenSpecies={hiddenSpecies}
+          onToggleSpecies={(key) => setHiddenSpecies((h) => ({ ...h, [key]: !h[key] }))}
+          onClose={() => setSpeciesPanelLayer(null)}
+        />
+      )}
+
       {selectedMarker && (
         <MarkerModal
           marker={selectedMarker}
@@ -500,9 +630,13 @@ const styles = StyleSheet.create({
 
   legendScroll: { flexGrow: 0, marginTop: 10 },
   legendRow: { flexDirection: "row", paddingHorizontal: 14 },
-  legendChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, margin: 4, borderWidth: 1.5, backgroundColor: "#FFFFFF" },
+  legendChip: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, margin: 4, borderWidth: 1.5, backgroundColor: "#FFFFFF" },
   legendText: { fontSize: 13, fontWeight: "bold" },
   legendTextOn: { color: "#FFFFFF" },
+  legendExpandBtn: { marginLeft: 6, paddingLeft: 6, borderLeftWidth: 1, borderLeftColor: "rgba(0,0,0,0.15)" },
+  legendExpandIcon: { fontSize: 13, fontWeight: "bold" },
+  speciesCount: { color: "#8A97AD", fontSize: 12, fontWeight: "bold", marginRight: 8 },
+  pickerRowTextOff: { color: "#B7C2D6" },
 
   hideRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, marginTop: 8 },
   checkbox: { width: 18, height: 18, borderRadius: 4, borderWidth: 1.5, borderColor: "#C9D6EE",
@@ -520,14 +654,14 @@ const styles = StyleSheet.create({
   zoomBtnText: { color: "#41506B", fontSize: 20, fontWeight: "bold" },
   zoomPct: { color: "#8A97AD", fontSize: 11, fontWeight: "bold", paddingVertical: 2 },
 
-  marker: { position: "absolute", width: 30, height: 30, marginLeft: -15, marginTop: -15 },
-  markerHalo: { width: 30, height: 30, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.85)",
+  marker: { position: "absolute", width: 34, height: 34, marginLeft: -17, marginTop: -17 },
+  markerHalo: { width: 34, height: 34, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.85)",
     borderWidth: 1.5, alignItems: "center", justifyContent: "center",
     shadowColor: "#000", shadowOpacity: 0.35, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 3 },
-  markerIcon: { width: 22, height: 22 },
-  markerEmoji: { fontSize: 15, lineHeight: 19 },
+  markerIcon: { width: 26, height: 26 },
+  markerEmoji: { fontSize: 17, lineHeight: 21 },
   markerDone: { opacity: 0.4 },
-  markerDoneBadge: { position: "absolute", top: -4, right: -4, width: 16, height: 16, borderRadius: 999,
+  markerDoneBadge: { position: "absolute", top: -4, right: -4, width: 17, height: 17, borderRadius: 999,
     backgroundColor: "#3FA35A", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#FFFFFF" },
   markerDoneBadgeText: { color: "#FFFFFF", fontSize: 10, fontWeight: "bold", lineHeight: 12 },
   hint: { color: "#8A97AD", fontSize: 12, marginTop: 8 },
