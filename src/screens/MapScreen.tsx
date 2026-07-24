@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
-  View, Text, TouchableOpacity, StyleSheet, Image, Modal, ScrollView,
+  View, Text, TouchableOpacity, StyleSheet, Image, Modal,
   TextInput, FlatList, ActivityIndicator, useWindowDimensions, Platform, PanResponder,
 } from "react-native";
 import {
@@ -56,9 +56,13 @@ const MYSTERY_CHEST_TYPES = [
   { emoji: "👹", th: "มอนสเตอร์เฝ้าหีบ — ฆ่ามอนที่เฝ้าก่อนถึงจะเปิดได้", en: "Guardian monster — defeat the guard to open it" },
 ];
 
-const MIN_ZOOM = 1;
+const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.5;
+// Start already zoomed in past the cover-fit minimum (100%) — showing the
+// whole map at once made every marker read tiny; players can still zoom
+// back out to 50% themselves for an overview.
+const DEFAULT_ZOOM = 2;
 
 function MapPickerModal({
   maps, locale, onPick, onClose,
@@ -250,7 +254,7 @@ export default function MapScreen() {
     return v;
   });
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
-  const [zoom, setZoom] = useState(MIN_ZOOM);
+  const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const [pan, setPan] = useState({ x: 0, y: 0 }); // top-left offset of content within the viewport, always <= 0
   const [mapAreaHeight, setMapAreaHeight] = useState<number | null>(null);
   const [contentWidth, setContentWidth] = useState<number | null>(null);
@@ -280,19 +284,20 @@ export default function MapScreen() {
   const sizeRef = useRef({ viewport, content });
   sizeRef.current = { viewport, content };
 
+  // When content is smaller than the viewport in a dimension (possible now
+  // that zooming out below the cover-fit 100% is allowed), center it there
+  // instead of pinning it to the top-left corner.
   const clampPan = (p: { x: number; y: number }, c: { w: number; h: number }, v: { w: number; h: number }) => {
-    const minX = Math.min(0, v.w - c.w);
-    const minY = Math.min(0, v.h - c.h);
-    return { x: Math.max(minX, Math.min(0, p.x)), y: Math.max(minY, Math.min(0, p.y)) };
+    const x = c.w <= v.w ? (v.w - c.w) / 2 : Math.max(v.w - c.w, Math.min(0, p.x));
+    const y = c.h <= v.h ? (v.h - c.h) / 2 : Math.max(v.h - c.h, Math.min(0, p.y));
+    return { x, y };
   };
 
   // Reset zoom + re-center pan whenever a different map is picked, or once the
-  // real image size loads in (baseScale/content depend on it) — centered
-  // rather than {0,0} since the cover-fit content is now usually bigger than
-  // the viewport in one dimension even at zoom=1.
+  // real image size loads in (baseScale/content depend on it).
   useEffect(() => {
-    setZoom(MIN_ZOOM);
-    const baseW = natW * baseScale, baseH = natH * baseScale;
+    setZoom(DEFAULT_ZOOM);
+    const baseW = natW * baseScale * DEFAULT_ZOOM, baseH = natH * baseScale * DEFAULT_ZOOM;
     setPan({ x: Math.min(0, (viewportW - baseW) / 2), y: Math.min(0, (viewportH - baseH) / 2) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sceneId, imgSize]);
@@ -466,12 +471,7 @@ export default function MapScreen() {
         <Text style={styles.mapPickIcon}>▾</Text>
       </TouchableOpacity>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.legendScroll}
-        contentContainerStyle={styles.legendRow}
-      >
+      <View style={styles.legendRow}>
         {LAYER_DEFS.map((l) => {
           const on = visible[l.key];
           const c = counts[l.key];
@@ -495,7 +495,7 @@ export default function MapScreen() {
             </View>
           );
         })}
-      </ScrollView>
+      </View>
 
       <TouchableOpacity style={styles.hideRow} onPress={() => setHideCollected((h) => !h)}>
         <View style={[styles.checkbox, hideCollected && styles.checkboxOn]}>
@@ -638,8 +638,7 @@ const styles = StyleSheet.create({
   mapPickText: { color: "#41506B", fontSize: 16, fontWeight: "bold", flex: 1, marginRight: 8 },
   mapPickIcon: { color: "#8A97AD", fontSize: 14, fontWeight: "bold" },
 
-  legendScroll: { flexGrow: 0, marginTop: 10 },
-  legendRow: { flexDirection: "row", paddingHorizontal: 14 },
+  legendRow: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 10, marginTop: 10 },
   legendChip: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, margin: 4, borderWidth: 1.5, backgroundColor: "#FFFFFF" },
   legendText: { fontSize: 13, fontWeight: "bold" },
   legendTextOn: { color: "#FFFFFF" },
