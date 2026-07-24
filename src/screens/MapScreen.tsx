@@ -112,8 +112,15 @@ function MarkerModal({
             )}
             <View style={{ flex: 1 }}>
               <Text style={styles.markerName}>{marker.name}</Text>
-              <View style={[styles.markerBadge, { backgroundColor: layerDef.color }]}>
-                <Text style={styles.markerBadgeText}>{th ? layerDef.th : layerDef.en}</Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                <View style={[styles.markerBadge, { backgroundColor: layerDef.color }]}>
+                  <Text style={styles.markerBadgeText}>{th ? layerDef.th : layerDef.en}</Text>
+                </View>
+                {marker.reqLevel != null && (
+                  <View style={[styles.markerBadge, styles.markerLevelBadge]}>
+                    <Text style={styles.markerBadgeText}>{th ? `เลเวล ${marker.reqLevel}+` : `Lv.${marker.reqLevel}+`}</Text>
+                  </View>
+                )}
               </View>
             </View>
           </View>
@@ -550,8 +557,9 @@ const styles = StyleSheet.create({
   markerEmojiWrap: { alignItems: "center", justifyContent: "center" },
   markerEmojiLarge: { fontSize: 28 },
   markerName: { color: "#41506B", fontSize: 16, fontWeight: "bold" },
-  markerBadge: { alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, marginTop: 4 },
+  markerBadge: { alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, marginTop: 4, marginRight: 6 },
   markerBadgeText: { color: "#FFFFFF", fontSize: 11, fontWeight: "bold" },
+  markerLevelBadge: { backgroundColor: "#5A6781" },
   rewardRow: { marginTop: 12, borderTopWidth: 1, borderTopColor: "#E6EDF7", paddingTop: 10 },
   rewardLabel: { color: "#8A97AD", fontSize: 12, fontWeight: "bold", marginBottom: 6 },
   rewardItem: { flexDirection: "row", alignItems: "center", marginRight: 12, marginBottom: 6 },

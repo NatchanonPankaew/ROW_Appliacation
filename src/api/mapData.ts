@@ -84,6 +84,7 @@ export interface MapMarker {
   x: number;             // world X
   z: number;             // world Z
   reward?: CardRewardItem[];
+  reqLevel?: number;     // base level required to turn in/collect (card quests only)
 }
 
 // Chef recipe pickup points. roworlddb.com's own map tool doesn't track this
@@ -225,6 +226,7 @@ export async function fetchMarkersByScene(locale: string): Promise<Map<number, M
           x: Number(pos[0]),
           z: Number(pos[2]),
           reward: e.rewardItems || e.quest?.rewardItems || [],
+          reqLevel: e.quest?.requirements?.baseLevel,
         });
       }
     }
