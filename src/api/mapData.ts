@@ -3,7 +3,7 @@
 // scripts/sync-data.mjs). Coordinate math mirrors the site's own
 // worldXZToNaturalPixels() so markers land in the same spot as upstream.
 import { BASE_DATA, BASE_IMG, getJSON } from "./roworlddb";
-import { COMMUNITY_MYSTERY_CHESTS, CommunityChestPoint } from "./communityMysteryChests";
+import { COMMUNITY_MYSTERY_CHESTS, MYSTERY_SUBTYPE_INFO, CommunityChestPoint } from "./communityMysteryChests";
 
 export interface WorldMapEntry {
   world_map_id: number;
@@ -266,16 +266,15 @@ export async function fetchMarkersByScene(locale: string): Promise<Map<number, M
         push(sceneId, {
           layer,
           key: layer + "_" + e.id,
-          // The map pin always keeps the same generic look regardless of
-          // sub-type match (never swaps per-point) so it doesn't look like
-          // chests are randomly vanishing — the specific sub-type, when
-          // known, only surfaces as extra detail inside the tap modal.
-          // mystery_chest gets its own "?" symbol rather than the game's
-          // own icon, which is otherwise visually identical to monster_chest
-          // (both share icon_map_mark_045 upstream).
+          // mystery_chest never uses the game's own icon — it's visually
+          // identical to monster_chest upstream (both share
+          // icon_map_mark_045). Points matched to a community sub-type show
+          // that type's own emoji (colored ring keyed off the same reference
+          // site, applied in MapScreen); unmatched points fall back to a
+          // plain "?" so the count still always matches roworlddb exactly.
           name: label,
           icon: layer === "mystery_chest" ? undefined : e.markIcon || raw.meta?.typeIcon || "icon_map_mark_kpmw",
-          emoji: layer === "mystery_chest" ? "❓" : undefined,
+          emoji: layer === "mystery_chest" ? (match ? MYSTERY_SUBTYPE_INFO[match.subtype].emoji : "❓") : undefined,
           mysterySubtype: match?.subtype,
           x,
           z,

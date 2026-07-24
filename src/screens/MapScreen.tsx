@@ -539,7 +539,12 @@ export default function MapScreen() {
                 {visibleMarkers.map((m) => {
                   const { left, top } = worldToImageFraction(currentCfg, m.x, m.z);
                   if (left < -0.02 || left > 1.02 || top < -0.02 || top > 1.02) return null;
-                  const layerColor = LAYER_DEFS.find((l) => l.key === m.layer)?.color || "#FFFFFF";
+                  // A matched mystery-chest sub-type gets its own color (matching
+                  // the reference tracker's icon coloring) instead of the flat
+                  // generic mystery_chest purple, so the type is readable at a glance.
+                  const layerColor = m.mysterySubtype
+                    ? MYSTERY_SUBTYPE_INFO[m.mysterySubtype].color
+                    : LAYER_DEFS.find((l) => l.key === m.layer)?.color || "#FFFFFF";
                   const done = !!collected[m.key];
                   return (
                     <TouchableOpacity
@@ -663,14 +668,14 @@ const styles = StyleSheet.create({
   zoomBtnText: { color: "#41506B", fontSize: 20, fontWeight: "bold" },
   zoomPct: { color: "#8A97AD", fontSize: 11, fontWeight: "bold", paddingVertical: 2 },
 
-  marker: { position: "absolute", width: 34, height: 34, marginLeft: -17, marginTop: -17 },
-  markerHalo: { width: 34, height: 34, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.95)",
+  marker: { position: "absolute", width: 40, height: 40, marginLeft: -20, marginTop: -20 },
+  markerHalo: { width: 40, height: 40, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.95)",
     borderWidth: 3, alignItems: "center", justifyContent: "center",
     shadowColor: "#000", shadowOpacity: 0.35, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 3 },
-  markerIcon: { width: 26, height: 26 },
-  markerEmoji: { fontSize: 17, lineHeight: 21 },
+  markerIcon: { width: 30, height: 30 },
+  markerEmoji: { fontSize: 20, lineHeight: 24 },
   markerDone: { opacity: 0.4 },
-  markerDoneBadge: { position: "absolute", top: -4, right: -4, width: 17, height: 17, borderRadius: 999,
+  markerDoneBadge: { position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: 999,
     backgroundColor: "#3FA35A", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#FFFFFF" },
   markerDoneBadgeText: { color: "#FFFFFF", fontSize: 10, fontWeight: "bold", lineHeight: 12 },
   hint: { color: "#8A97AD", fontSize: 12, marginTop: 8, textAlign: "center", paddingHorizontal: 16 },
