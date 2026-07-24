@@ -153,10 +153,23 @@ async function fetchPlacingRaw(locale: string, file: string): Promise<PlacingRaw
 // scene_id would fragment one region into a dozen near-empty picker entries.
 export async function fetchMarkersByScene(locale: string): Promise<Map<number, MapMarker[]>> {
   const placingLayers = Object.keys(PLACING_FILES) as MapLayer[];
-  const [spawns, ...placings] = await Promise.all([
+  const [idx, spawns, ...placings] = await Promise.all([
+    fetchMapIndex(locale),
     fetchMonsterSpawnsRaw(locale),
     ...placingLayers.map((layer) => fetchPlacingRaw(locale, PLACING_FILES[layer]!)),
   ]);
+
+  // Some placing entries carry a raw scene_id that's actually a shared
+  // "connector" corridor between two named areas (e.g. Geffen River's chests
+  // are filed under scene 10005, the Prontera<->Geffen transit scene, not
+  // Geffen River's own 10141) — the same raw id can legitimately belong to
+  // different regions depending on the entry. mapRegionName is the reliable
+  // per-entry signal for this: when it matches a real world-map name, use
+  // that map's scene id outright, ahead of the (raw-id -> one view) fallback.
+  const nameToScene = new Map<string, number>();
+  for (const wm of idx.world_maps || []) {
+    if (wm.name) nameToScene.set(wm.name, wm.center_scene_id);
+  }
 
   const byScene = new Map<number, MapMarker[]>();
   const push = (sceneId: number, m: MapMarker) => {
@@ -190,14 +203,14 @@ export async function fetchMarkersByScene(locale: string): Promise<Map<number, M
     }
   }
 
-  placingLayers.forEach((layer, idx) => {
-    const raw = placings[idx];
+  placingLayers.forEach((layer, layerIdx) => {
+    const raw = placings[layerIdx];
     for (const arr of Object.values(raw.data || {})) {
       for (const e of arr || []) {
         const rawSceneId = Number(e.sceneId);
         const pos = e.objectPos;
         if (!Number.isFinite(rawSceneId) || !Array.isArray(pos)) continue;
-        const sceneId = sceneToView.get(rawSceneId) ?? rawSceneId;
+        const sceneId = nameToScene.get(e.mapRegionName) ?? sceneToView.get(rawSceneId) ?? rawSceneId;
         // These scenes get precisely-typed points from COMMUNITY_MYSTERY_CHESTS
         // below instead of roworlddb's untyped generic mystery_chest pins.
         if (layer === "mystery_chest" && COMMUNITY_MYSTERY_SCENE_IDS.has(sceneId)) continue;
