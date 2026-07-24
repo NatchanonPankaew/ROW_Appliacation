@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
-  View, Text, TouchableOpacity, StyleSheet, Image, Modal,
+  View, Text, TouchableOpacity, StyleSheet, Image, Modal, ScrollView,
   TextInput, FlatList, ActivityIndicator, useWindowDimensions, Platform, PanResponder,
 } from "react-native";
 import {
@@ -187,7 +187,7 @@ export default function MapScreen() {
   // with nothing to scroll them into view.
   const containerWidth = Math.min(
     width - 32,
-    720,
+    900,
     mapAreaHeight ? mapAreaHeight * aspect : Infinity
   );
   const viewport = { w: containerWidth, h: containerWidth / aspect };
@@ -335,7 +335,12 @@ export default function MapScreen() {
         <Text style={styles.mapPickIcon}>▾</Text>
       </TouchableOpacity>
 
-      <View style={styles.legendRow}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.legendScroll}
+        contentContainerStyle={styles.legendRow}
+      >
         {LAYER_DEFS.map((l) => {
           const on = visible[l.key];
           const c = counts[l.key];
@@ -349,7 +354,7 @@ export default function MapScreen() {
             </TouchableOpacity>
           );
         })}
-      </View>
+      </ScrollView>
 
       <TouchableOpacity style={styles.hideRow} onPress={() => setHideCollected((h) => !h)}>
         <View style={[styles.checkbox, hideCollected && styles.checkboxOn]}>
@@ -481,7 +486,8 @@ const styles = StyleSheet.create({
   mapPickText: { color: "#41506B", fontSize: 16, fontWeight: "bold", flex: 1, marginRight: 8 },
   mapPickIcon: { color: "#8A97AD", fontSize: 14, fontWeight: "bold" },
 
-  legendRow: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 14, marginTop: 10 },
+  legendScroll: { flexGrow: 0, marginTop: 10 },
+  legendRow: { flexDirection: "row", paddingHorizontal: 14 },
   legendChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, margin: 4, borderWidth: 1.5, backgroundColor: "#FFFFFF" },
   legendText: { fontSize: 13, fontWeight: "bold" },
   legendTextOn: { color: "#FFFFFF" },
