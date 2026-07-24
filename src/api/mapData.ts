@@ -172,6 +172,31 @@ export async function fetchMarkersByScene(locale: string): Promise<Map<number, M
     if (wm.name) nameToScene.set(wm.name, wm.center_scene_id);
   }
 
+  // Some placing entries' sceneId isn't a real scene/map_config key at all —
+  // it's actually a background-image resource number (e.g. 10005, which
+  // matches no map_config, but map_configs 10141 "Geffen River" and 10142 both
+  // use pic_res "icon_map_10005"). Reverse pic_res -> config keys so those
+  // entries resolve to the map that actually shows them, instead of falling
+  // all the way through to a bucket with no background image (silently
+  // dropping the marker, as happened to Geffen River's Ambernite/Savage Babe
+  // cards and its chests/landmarks/kafra points).
+  const validSceneIds = new Set(Object.keys(idx.map_configs || {}).map(Number));
+  const worldMapSceneIds = new Set((idx.world_maps || []).map((wm) => wm.center_scene_id));
+  const picResGroups = new Map<number, number[]>();
+  for (const [key, cfg] of Object.entries(idx.map_configs || {})) {
+    const m = /^icon_map_(\d+)$/.exec(cfg.pic_res || "");
+    if (!m) continue;
+    const picNum = Number(m[1]);
+    const group = picResGroups.get(picNum);
+    if (group) group.push(Number(key));
+    else picResGroups.set(picNum, [Number(key)]);
+  }
+  const resolveUnknownScene = (rawSceneId: number): number => {
+    const group = picResGroups.get(rawSceneId);
+    if (!group) return rawSceneId;
+    return group.find((k) => worldMapSceneIds.has(k)) ?? group[0];
+  };
+
   const byScene = new Map<number, MapMarker[]>();
   const push = (sceneId: number, m: MapMarker) => {
     const arr = byScene.get(sceneId);
@@ -211,7 +236,10 @@ export async function fetchMarkersByScene(locale: string): Promise<Map<number, M
         const rawSceneId = Number(e.sceneId);
         const pos = e.objectPos;
         if (!Number.isFinite(rawSceneId) || !Array.isArray(pos)) continue;
-        const sceneId = nameToScene.get(e.mapRegionName) ?? sceneToView.get(rawSceneId) ?? rawSceneId;
+        const sceneId =
+          nameToScene.get(e.mapRegionName) ??
+          sceneToView.get(rawSceneId) ??
+          (validSceneIds.has(rawSceneId) ? rawSceneId : resolveUnknownScene(rawSceneId));
         // These scenes get precisely-typed points from COMMUNITY_MYSTERY_CHESTS
         // below instead of roworlddb's untyped generic mystery_chest pins.
         if (layer === "mystery_chest" && COMMUNITY_MYSTERY_SCENE_IDS.has(sceneId)) continue;
