@@ -257,16 +257,17 @@ export default function MapScreen() {
   const th = locale === "th-TH";
 
   // Viewport is a rectangle sized independently in each dimension — the
-  // screen's own actual rendered width (not the raw window width: on wide
-  // desktops the app shell centers content in a capped ~1200px column, so
-  // using the full window width here would overflow it) and whatever
-  // vertical space onLayout says is left below the header/legend rows.
-  // The image still keeps its true aspect (never distorted): at zoom=1 it's
-  // scaled with a "cover" fit (like CSS object-fit: cover) so it fills the
-  // box edge-to-edge, cropped top/bottom or sides as needed; the pan
-  // feature already built lets you reach whatever falls outside the box.
+  // screen's own actual rendered width, edge to edge (not the raw window
+  // width: on wide desktops the app shell centers content in a capped
+  // ~1200px column, so using the full window width here would overflow it)
+  // and whatever vertical space onLayout says is left below the header/
+  // legend rows. The image still keeps its true aspect (never distorted):
+  // at zoom=1 it's scaled with a "cover" fit (like CSS object-fit: cover)
+  // so it fills the box edge-to-edge, cropped top/bottom or sides as
+  // needed; the pan feature already built lets you reach whatever falls
+  // outside the box.
   const natW = imgSize?.w ?? 1000, natH = imgSize?.h ?? 1000;
-  const viewportW = (contentWidth ?? width) - 32;
+  const viewportW = contentWidth ?? width;
   const viewportH = mapAreaHeight ?? viewportW; // falls back before first onLayout
   const viewport = { w: viewportW, h: viewportH };
   const baseScale = Math.max(viewportW / natW, viewportH / natH);
@@ -524,12 +525,12 @@ export default function MapScreen() {
           // exactly that case, which is what left the zoom controls/hint
           // text unreachable with body's overflow:hidden allowing no scroll.
           key={`${Math.round(width)}x${Math.round(windowHeight)}`}
-          style={{ flex: 1, alignItems: "center", paddingVertical: 12 }}
-          onLayout={(e) => setMapAreaHeight(Math.max(120, e.nativeEvent.layout.height - 60))}
+          style={{ flex: 1 }}
+          onLayout={(e) => setMapAreaHeight(Math.max(120, e.nativeEvent.layout.height - 28))}
         >
           <View style={{ width: viewport.w, height: viewport.h }}>
             <View
-              style={{ width: viewport.w, height: viewport.h, borderRadius: 12, overflow: "hidden", backgroundColor: "#0F1626" }}
+              style={{ width: viewport.w, height: viewport.h, overflow: "hidden", backgroundColor: "#0F1626" }}
               {...webWheelProps}
               {...panResponder.panHandlers}
             >
@@ -664,8 +665,8 @@ const styles = StyleSheet.create({
   zoomPct: { color: "#8A97AD", fontSize: 11, fontWeight: "bold", paddingVertical: 2 },
 
   marker: { position: "absolute", width: 34, height: 34, marginLeft: -17, marginTop: -17 },
-  markerHalo: { width: 34, height: 34, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.85)",
-    borderWidth: 1.5, alignItems: "center", justifyContent: "center",
+  markerHalo: { width: 34, height: 34, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.95)",
+    borderWidth: 3, alignItems: "center", justifyContent: "center",
     shadowColor: "#000", shadowOpacity: 0.35, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 3 },
   markerIcon: { width: 26, height: 26 },
   markerEmoji: { fontSize: 17, lineHeight: 21 },
@@ -673,7 +674,7 @@ const styles = StyleSheet.create({
   markerDoneBadge: { position: "absolute", top: -4, right: -4, width: 17, height: 17, borderRadius: 999,
     backgroundColor: "#3FA35A", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#FFFFFF" },
   markerDoneBadgeText: { color: "#FFFFFF", fontSize: 10, fontWeight: "bold", lineHeight: 12 },
-  hint: { color: "#8A97AD", fontSize: 12, marginTop: 8 },
+  hint: { color: "#8A97AD", fontSize: 12, marginTop: 8, textAlign: "center", paddingHorizontal: 16 },
 
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   error: { color: "#E0564E", marginBottom: 12, paddingHorizontal: 24, textAlign: "center" },

@@ -266,12 +266,16 @@ export async function fetchMarkersByScene(locale: string): Promise<Map<number, M
         push(sceneId, {
           layer,
           key: layer + "_" + e.id,
-          // The map pin always keeps the chest icon and generic name (never
-          // swaps to the weather emoji) so a scan of the map still reads as
-          // "chest here" — the specific sub-type, when known, only surfaces
-          // as extra detail inside the tap modal.
+          // The map pin always keeps the same generic look regardless of
+          // sub-type match (never swaps per-point) so it doesn't look like
+          // chests are randomly vanishing — the specific sub-type, when
+          // known, only surfaces as extra detail inside the tap modal.
+          // mystery_chest gets its own "?" symbol rather than the game's
+          // own icon, which is otherwise visually identical to monster_chest
+          // (both share icon_map_mark_045 upstream).
           name: label,
-          icon: e.markIcon || raw.meta?.typeIcon || "icon_map_mark_kpmw",
+          icon: layer === "mystery_chest" ? undefined : e.markIcon || raw.meta?.typeIcon || "icon_map_mark_kpmw",
+          emoji: layer === "mystery_chest" ? "❓" : undefined,
           mysterySubtype: match?.subtype,
           x,
           z,
