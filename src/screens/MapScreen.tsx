@@ -187,7 +187,7 @@ export default function MapScreen() {
   // wide box edge-to-edge, cropped top/bottom or sides as needed; the pan
   // feature already built lets you reach whatever falls outside the box.
   const natW = imgSize?.w ?? 1000, natH = imgSize?.h ?? 1000;
-  const viewportW = Math.min(width - 32, 1400);
+  const viewportW = width - 32;
   const viewportH = mapAreaHeight ?? viewportW; // falls back before first onLayout
   const viewport = { w: viewportW, h: viewportH };
   const baseScale = Math.max(viewportW / natW, viewportH / natH);

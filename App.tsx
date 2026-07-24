@@ -35,8 +35,10 @@ const TABS: { key: TabKey; label: string }[] = [
 function Main() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const isWide = width >= 640;                 // PC / tablet: center a phone-width column
   const [tab, setTab] = useState<TabKey>("cards");
+  // PC / tablet: center a phone-width column — except Maps, which wants the
+  // full browser width for its viewport rather than being boxed into ~1200px.
+  const isWide = width >= 640 && tab !== "maps";
   const [showSupport, setShowSupport] = useState(true); // greet with the Support popup
   const [views, setViews] = useState<number | null>(null);
   const active = TABS.find((t) => t.key === tab)!;
