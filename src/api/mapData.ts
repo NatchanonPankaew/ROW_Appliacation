@@ -3,7 +3,7 @@
 // scripts/sync-data.mjs). Coordinate math mirrors the site's own
 // worldXZToNaturalPixels() so markers land in the same spot as upstream.
 import { BASE_DATA, BASE_IMG, getJSON } from "./roworlddb";
-import { COMMUNITY_MYSTERY_CHESTS, MYSTERY_SUBTYPE_INFO, CommunityChestPoint } from "./communityMysteryChests";
+import { COMMUNITY_MYSTERY_CHESTS, CommunityChestPoint } from "./communityMysteryChests";
 
 export interface WorldMapEntry {
   world_map_id: number;
@@ -92,6 +92,7 @@ export interface MapMarker {
   reward?: CardRewardItem[];
   reqLevel?: number;     // base level required to turn in/collect (card/recipe/quest entries)
   speciesKey?: string;   // stable per-species id (mvp/elite/mini only) for the breakdown list
+  mysterySubtype?: CommunityChestPoint["subtype"]; // known weather sub-type (mystery_chest only) — shown in the tap modal, not on the pin
 }
 
 const _mapIndexCache = new Map<string, MapIndex>();
@@ -262,13 +263,16 @@ export async function fetchMarkersByScene(locale: string): Promise<Map<number, M
             ? (e.cookingStarter?.[1] || raw.meta?.infoTypeEn || "Private Chef")
             : (raw.meta?.infoType || raw.meta?.infoTypeEn || layer);
         const match = layer === "mystery_chest" ? findMysteryMatch(sceneId, x, z) : null;
-        const info = match ? MYSTERY_SUBTYPE_INFO[match.subtype] : null;
         push(sceneId, {
           layer,
           key: layer + "_" + e.id,
-          name: info ? (th ? info.th : info.en) : label,
-          icon: info ? undefined : e.markIcon || raw.meta?.typeIcon || "icon_map_mark_kpmw",
-          emoji: info?.emoji,
+          // The map pin always keeps the chest icon and generic name (never
+          // swaps to the weather emoji) so a scan of the map still reads as
+          // "chest here" — the specific sub-type, when known, only surfaces
+          // as extra detail inside the tap modal.
+          name: label,
+          icon: e.markIcon || raw.meta?.typeIcon || "icon_map_mark_kpmw",
+          mysterySubtype: match?.subtype,
           x,
           z,
           reward: e.rewardItems || e.quest?.rewardItems || [],

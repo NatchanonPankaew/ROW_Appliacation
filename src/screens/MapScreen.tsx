@@ -9,6 +9,7 @@ import {
   MapConfig, MapMarker, MapLayer,
 } from "../api/mapData";
 import { loadJSON, saveJSON } from "../api/storage";
+import { MYSTERY_SUBTYPE_INFO } from "../api/communityMysteryChests";
 
 const COLLECTED_STORAGE_KEY = "row_map_collected_points";
 
@@ -195,7 +196,15 @@ function MarkerModal({
               </View>
             </View>
           )}
-          {marker.layer === "mystery_chest" && !marker.emoji && (
+          {marker.layer === "mystery_chest" && marker.mysterySubtype && (
+            <View style={styles.rewardRow}>
+              <Text style={styles.rewardLabel}>{th ? "ชนิดที่คาดว่าเป็น" : "Likely type"}</Text>
+              <Text style={styles.mysteryTypeLine}>
+                {MYSTERY_SUBTYPE_INFO[marker.mysterySubtype].emoji}  {th ? MYSTERY_SUBTYPE_INFO[marker.mysterySubtype].th : MYSTERY_SUBTYPE_INFO[marker.mysterySubtype].en}
+              </Text>
+            </View>
+          )}
+          {marker.layer === "mystery_chest" && !marker.mysterySubtype && (
             <View style={styles.rewardRow}>
               <Text style={styles.rewardLabel}>
                 {th ? "จุดนี้อาจเป็น 1 ใน 6 แบบนี้ ขึ้นกับสภาพอากาศ" : "This point may be one of 6 variants, depending on weather"}
