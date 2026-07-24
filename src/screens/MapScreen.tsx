@@ -179,19 +179,19 @@ export default function MapScreen() {
   const [mapAreaHeight, setMapAreaHeight] = useState<number | null>(null);
   const th = locale === "th-TH";
 
-  const aspect = imgSize ? imgSize.w / imgSize.h : 1;
-  // Fit the map inside whatever space is actually left below the header controls
-  // (measured via onLayout) as well as the screen width — on short viewports the
-  // header chips alone can leave less room than a width-only size would need,
-  // which used to push the zoom controls/hint text off the bottom of the screen
-  // with nothing to scroll them into view.
-  const containerWidth = Math.min(
-    width - 32,
-    900,
-    mapAreaHeight ? mapAreaHeight * aspect : Infinity
-  );
-  const viewport = { w: containerWidth, h: containerWidth / aspect };
-  const content = { w: containerWidth * zoom, h: (containerWidth * zoom) / aspect };
+  // Viewport is now a wide rectangle sized independently in each dimension —
+  // full available width, and whatever vertical space onLayout says is left
+  // — rather than being forced to match the map image's own aspect ratio.
+  // The image still keeps its true aspect (never distorted): at zoom=1 it's
+  // scaled with a "cover" fit (like CSS object-fit: cover) so it fills the
+  // wide box edge-to-edge, cropped top/bottom or sides as needed; the pan
+  // feature already built lets you reach whatever falls outside the box.
+  const natW = imgSize?.w ?? 1000, natH = imgSize?.h ?? 1000;
+  const viewportW = Math.min(width - 32, 1400);
+  const viewportH = mapAreaHeight ?? viewportW; // falls back before first onLayout
+  const viewport = { w: viewportW, h: viewportH };
+  const baseScale = Math.max(viewportW / natW, viewportH / natH);
+  const content = { w: natW * baseScale * zoom, h: natH * baseScale * zoom };
 
   // Keep the latest pan/sizes in refs so the PanResponder's callbacks (created
   // once) always read fresh values instead of a stale closure from first render.
@@ -206,11 +206,16 @@ export default function MapScreen() {
     return { x: Math.max(minX, Math.min(0, p.x)), y: Math.max(minY, Math.min(0, p.y)) };
   };
 
-  // Reset pan/zoom whenever a different map is picked, so it always opens fit-to-screen.
+  // Reset zoom + re-center pan whenever a different map is picked, or once the
+  // real image size loads in (baseScale/content depend on it) — centered
+  // rather than {0,0} since the cover-fit content is now usually bigger than
+  // the viewport in one dimension even at zoom=1.
   useEffect(() => {
     setZoom(MIN_ZOOM);
-    setPan({ x: 0, y: 0 });
-  }, [sceneId]);
+    const baseW = natW * baseScale, baseH = natH * baseScale;
+    setPan({ x: Math.min(0, (viewportW - baseW) / 2), y: Math.min(0, (viewportH - baseH) / 2) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sceneId, imgSize]);
 
   // Zoom while keeping whatever point is currently centered in the viewport
   // centered afterwards too, instead of jumping back to the top-left corner.
@@ -219,15 +224,15 @@ export default function MapScreen() {
       const nz = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round((prevZoom + delta) * 10) / 10));
       if (nz === prevZoom) return prevZoom;
       const { viewport: v } = sizeRef.current;
-      const oldW = containerWidth * prevZoom, oldH = oldW / aspect;
-      const newW = containerWidth * nz, newH = newW / aspect;
+      const oldW = natW * baseScale * prevZoom, oldH = natH * baseScale * prevZoom;
+      const newW = natW * baseScale * nz, newH = natH * baseScale * nz;
       const cur = panRef.current;
       const fx = (v.w / 2 - cur.x) / oldW;
       const fy = (v.h / 2 - cur.y) / oldH;
       setPan(clampPan({ x: v.w / 2 - fx * newW, y: v.h / 2 - fy * newH }, { w: newW, h: newH }, v));
       return nz;
     });
-  }, [containerWidth, aspect]);
+  }, [natW, natH, baseScale]);
 
   // Drag-to-pan: only claim the gesture once the touch/mouse actually moves
   // (onStartShouldSet = false) so marker taps underneath still fire normally.
