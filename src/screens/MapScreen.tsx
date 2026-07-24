@@ -553,12 +553,14 @@ export default function MapScreen() {
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       onPress={() => setSelectedMarker(m)}
                     >
-                      <View style={[styles.markerHalo, { borderColor: layerColor }]}>
-                        {m.emoji ? (
-                          <Text style={styles.markerEmoji}>{m.emoji}</Text>
-                        ) : (
-                          <Image source={{ uri: mapMarkIconUrl(m.icon!) }} style={styles.markerIcon} resizeMode="contain" />
-                        )}
+                      <View style={styles.markerShadowWrap}>
+                        <View style={[styles.markerHalo, { borderColor: layerColor }]}>
+                          {m.emoji ? (
+                            <Text style={styles.markerEmoji}>{m.emoji}</Text>
+                          ) : (
+                            <Image source={{ uri: mapMarkIconUrl(m.icon!) }} style={styles.markerIcon} resizeMode="contain" />
+                          )}
+                        </View>
                       </View>
                       {done && (
                         <View style={styles.markerDoneBadge}>
@@ -669,10 +671,19 @@ const styles = StyleSheet.create({
   zoomPct: { color: "#8A97AD", fontSize: 11, fontWeight: "bold", paddingVertical: 2 },
 
   marker: { position: "absolute", width: 42, height: 42, marginLeft: -21, marginTop: -21 },
-  markerHalo: { width: 42, height: 42, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.95)",
-    borderWidth: 1.5, alignItems: "center", justifyContent: "center",
+  // The source mark icons themselves have heavy transparent padding baked
+  // in (the actual chest/mark art only fills their center ~55% or so), so
+  // sizing the <Image> to match the halo left a wide ring of white behind a
+  // small-looking icon no matter how big the box was. Fix: clip the halo
+  // (overflow hidden) and render the icon well past its own bounds — the
+  // clip crops away the source's own padding, so what's left fills the
+  // circle. The drop shadow moves to an outer, non-clipping wrapper since
+  // overflow:hidden would otherwise cut the shadow off too.
+  markerShadowWrap: { width: 42, height: 42, borderRadius: 999,
     shadowColor: "#000", shadowOpacity: 0.35, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 3 },
-  markerIcon: { width: 39, height: 39 },
+  markerHalo: { width: 42, height: 42, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.95)",
+    borderWidth: 1.5, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  markerIcon: { width: 68, height: 68 },
   markerEmoji: { fontSize: 26, lineHeight: 30 },
   markerDone: { opacity: 0.4 },
   markerDoneBadge: { position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: 999,
