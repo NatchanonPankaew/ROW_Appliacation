@@ -552,7 +552,13 @@ export default function MapScreen() {
     if (pushTimer.current) clearTimeout(pushTimer.current);
     pushTimer.current = setTimeout(() => {
       setSyncStatus("syncing");
-      pushMapsSync({ collected, iconScale, visible, hideCollected }).then((ok) => setSyncStatus(ok ? "synced" : "error"));
+      // A rejected promise here (network blip, etc.) with no .catch() would
+      // leave syncStatus stuck on "syncing" forever with no way to recover -
+      // exactly what showed up as a permanent hourglass icon. Always settle
+      // to a terminal status.
+      pushMapsSync({ collected, iconScale, visible, hideCollected })
+        .then((ok) => setSyncStatus(ok ? "synced" : "error"))
+        .catch(() => setSyncStatus("error"));
     }, 1500);
     return () => { if (pushTimer.current) clearTimeout(pushTimer.current); };
   }, [collected, iconScale, visible, hideCollected, googleProfile]);

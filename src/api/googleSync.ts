@@ -114,10 +114,21 @@ export function signOutGoogle(): void {
 
 async function authedFetch(path: string, init?: RequestInit): Promise<Response> {
   if (!idToken) throw new Error("not signed in");
-  return fetch(API_HOST + path, {
-    ...init,
-    headers: { ...(init?.headers || {}), Authorization: "Bearer " + idToken, "content-type": "application/json" },
-  });
+  // Explicit timeout so a genuinely hung connection rejects in a few
+  // seconds instead of leaving callers waiting on the browser's own
+  // (much longer, and inconsistent) default — that's what a stuck "syncing"
+  // status with no recovery would otherwise look like.
+  const controller = webGlobal.AbortController ? new webGlobal.AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), 10000) : null;
+  try {
+    return await fetch(API_HOST + path, {
+      ...init,
+      headers: { ...(init?.headers || {}), Authorization: "Bearer " + idToken, "content-type": "application/json" },
+      signal: controller?.signal,
+    });
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 export async function pullMapsSync(): Promise<MapsSyncRecord | null> {
