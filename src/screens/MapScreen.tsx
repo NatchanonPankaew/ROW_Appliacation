@@ -554,9 +554,57 @@ export default function MapScreen() {
 
   const currentCfg = sceneId != null ? configs[String(sceneId)] : null;
   const currentMarkers = sceneId != null ? (markersByScene.get(sceneId) || []) : [];
-  const visibleMarkers = currentMarkers.filter((m) =>
-    visible[m.layer] && !(m.speciesKey && hiddenSpecies[m.speciesKey]) && !(hideCollected && collected[m.key])
+  // Memoized so panning (which only changes `pan`, not any of these) reuses
+  // the same array reference — see markerElements below for why that matters.
+  const visibleMarkers = useMemo(
+    () => currentMarkers.filter((m) =>
+      visible[m.layer] && !(m.speciesKey && hiddenSpecies[m.speciesKey]) && !(hideCollected && collected[m.key])
+    ),
+    [currentMarkers, visible, hiddenSpecies, hideCollected, collected]
   );
+
+  // Panning re-renders MapScreen on every pointer-move frame (pan.x/pan.y
+  // are React state), but none of these ~50-200 marker elements' own props
+  // depend on pan — only the shared container's left/top offset does. Without
+  // this memo, every drag frame would reconcile the full marker list anyway
+  // (new element objects each render, even with unchanged props), which is
+  // what was causing the stutter. Memoizing keeps the same element array
+  // reference across pan-only re-renders so React skips re-diffing them.
+  const markerElements = useMemo(() => {
+    if (!currentCfg) return null;
+    return visibleMarkers.map((m) => {
+      const { left, top } = worldToImageFraction(currentCfg, m.x, m.z);
+      if (left < -0.02 || left > 1.02 || top < -0.02 || top > 1.02) return null;
+      const done = !!collected[m.key];
+      return (
+        <TouchableOpacity
+          key={m.key}
+          style={[
+            styles.marker,
+            { left: `${left * 100}%`, top: `${top * 100}%`, width: markerSizes.size, height: markerSizes.size, marginLeft: -markerSizes.size / 2, marginTop: -markerSizes.size / 2 },
+            done && styles.markerDone,
+          ]}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          onPress={() => setSelectedMarker(m)}
+        >
+          <View style={[styles.markerShadowWrap, markerSizes.wrap]}>
+            <View style={[styles.markerHalo, markerSizes.wrap]}>
+              {m.emoji ? (
+                <Text style={[styles.markerEmoji, { fontSize: markerSizes.emojiFontSize, lineHeight: markerSizes.emojiFontSize * 1.15 }]}>{m.emoji}</Text>
+              ) : (
+                <Image source={{ uri: mapMarkIconUrl(m.icon!) }} style={markerSizes.icon} resizeMode="contain" />
+              )}
+            </View>
+          </View>
+          {done && (
+            <View style={[styles.markerDoneBadge, { width: markerSizes.badgeSize, height: markerSizes.badgeSize, top: -markerSizes.badgeSize / 5, right: -markerSizes.badgeSize / 5 }]}>
+              <Text style={[styles.markerDoneBadgeText, { fontSize: markerSizes.badgeSize * 0.55 }]}>✓</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      );
+    });
+  }, [visibleMarkers, currentCfg, collected, markerSizes]);
 
   const counts = useMemo(() => {
     const c = {} as Record<MapLayer, { total: number; done: number }>;
@@ -703,38 +751,7 @@ export default function MapScreen() {
             >
               <View style={{ position: "absolute", left: pan.x, top: pan.y, width: content.w, height: content.h }}>
                 <Image source={{ uri: mapBackgroundUrl(currentCfg.pic_res) }} style={StyleSheet.absoluteFill} resizeMode="contain" />
-                {visibleMarkers.map((m) => {
-                  const { left, top } = worldToImageFraction(currentCfg, m.x, m.z);
-                  if (left < -0.02 || left > 1.02 || top < -0.02 || top > 1.02) return null;
-                  const done = !!collected[m.key];
-                  return (
-                    <TouchableOpacity
-                      key={m.key}
-                      style={[
-                        styles.marker,
-                        { left: `${left * 100}%`, top: `${top * 100}%`, width: markerSizes.size, height: markerSizes.size, marginLeft: -markerSizes.size / 2, marginTop: -markerSizes.size / 2 },
-                        done && styles.markerDone,
-                      ]}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      onPress={() => setSelectedMarker(m)}
-                    >
-                      <View style={[styles.markerShadowWrap, markerSizes.wrap]}>
-                        <View style={[styles.markerHalo, markerSizes.wrap]}>
-                          {m.emoji ? (
-                            <Text style={[styles.markerEmoji, { fontSize: markerSizes.emojiFontSize, lineHeight: markerSizes.emojiFontSize * 1.15 }]}>{m.emoji}</Text>
-                          ) : (
-                            <Image source={{ uri: mapMarkIconUrl(m.icon!) }} style={markerSizes.icon} resizeMode="contain" />
-                          )}
-                        </View>
-                      </View>
-                      {done && (
-                        <View style={[styles.markerDoneBadge, { width: markerSizes.badgeSize, height: markerSizes.badgeSize, top: -markerSizes.badgeSize / 5, right: -markerSizes.badgeSize / 5 }]}>
-                          <Text style={[styles.markerDoneBadgeText, { fontSize: markerSizes.badgeSize * 0.55 }]}>✓</Text>
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
+                {markerElements}
               </View>
             </View>
 
