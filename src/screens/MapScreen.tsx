@@ -121,6 +121,55 @@ function MapPickerModal({
   );
 }
 
+function FiltersModal({
+  locale, visible, counts, onToggleLayer, onOpenSpecies, onClose,
+}: {
+  locale: string; visible: Record<MapLayer, boolean>; counts: Record<MapLayer, { total: number; done: number }>;
+  onToggleLayer: (key: MapLayer) => void; onOpenSpecies: (key: MapLayer) => void; onClose: () => void;
+}) {
+  const th = locale === "th-TH";
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalBg}>
+        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
+        <View style={styles.pickerCard}>
+          <View style={styles.modalHandle} />
+          <Text style={styles.pickerTitle}>{th ? "ตัวกรอง" : "Filters"}</Text>
+          <FlatList
+            data={LAYER_DEFS}
+            keyExtractor={(l) => l.key}
+            style={{ marginTop: 8 }}
+            renderItem={({ item: l }) => {
+              const on = visible[l.key];
+              const c = counts[l.key];
+              const canExpand = SPECIES_LAYERS.includes(l.key) && c.total > 0;
+              return (
+                <TouchableOpacity style={styles.filterRow} onPress={() => onToggleLayer(l.key)}>
+                  <View style={[styles.filterDot, { backgroundColor: l.color }]} />
+                  <Text style={styles.pickerRowText} numberOfLines={1}>{th ? l.th : l.en}</Text>
+                  <Text style={styles.speciesCount}>{c.done}/{c.total}</Text>
+                  {canExpand && (
+                    <TouchableOpacity
+                      style={styles.legendExpandBtn}
+                      hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                      onPress={() => onOpenSpecies(l.key)}
+                    >
+                      <Text style={[styles.legendExpandIcon, { color: "#5A6781" }]}>▤</Text>
+                    </TouchableOpacity>
+                  )}
+                  <View style={[styles.checkbox, on && styles.checkboxOn, { marginLeft: 10, marginRight: 0 }]}>
+                    {on && <Text style={styles.checkboxMark}>✓</Text>}
+                  </View>
+                </TouchableOpacity>
+              );
+            }}
+          />
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 function SpeciesBreakdownModal({
   layer, locale, species, hiddenSpecies, onToggleSpecies, onClose,
 }: {
@@ -257,6 +306,7 @@ export default function MapScreen() {
   const [markersByScene, setMarkersByScene] = useState<Map<number, MapMarker[]>>(new Map());
   const [sceneId, setSceneId] = useState<number | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedMarker, setSelectedMarker] = useState<MapMarker | null>(null);
   const [collected, setCollected] = useState<Record<string, true>>({});
   const [hideCollected, setHideCollected] = useState(false);
@@ -504,37 +554,20 @@ export default function MapScreen() {
         ))}
       </View>
 
-      <TouchableOpacity style={styles.mapPickBtn} onPress={() => setPickerOpen(true)}>
-        <Text style={styles.mapPickText} numberOfLines={1}>
-          {currentCfg?.name || (th ? "เลือกแมพ" : "Choose map")}
-        </Text>
-        <Text style={styles.mapPickIcon}>▾</Text>
-      </TouchableOpacity>
+      <View style={styles.pickBtnRow}>
+        <TouchableOpacity style={[styles.mapPickBtn, styles.pickBtnHalf]} onPress={() => setPickerOpen(true)}>
+          <Text style={styles.mapPickText} numberOfLines={1}>
+            {currentCfg?.name || (th ? "เลือกแมพ" : "Choose map")}
+          </Text>
+          <Text style={styles.mapPickIcon}>▾</Text>
+        </TouchableOpacity>
 
-      <View style={styles.legendRow}>
-        {LAYER_DEFS.map((l) => {
-          const on = visible[l.key];
-          const c = counts[l.key];
-          const canExpand = SPECIES_LAYERS.includes(l.key) && c.total > 0;
-          return (
-            <View key={l.key} style={[styles.legendChip, { borderColor: l.color }, on && { backgroundColor: l.color }]}>
-              <TouchableOpacity onPress={() => setVisible((v) => ({ ...v, [l.key]: !v[l.key] }))}>
-                <Text style={[styles.legendText, on && styles.legendTextOn, !on && { color: l.color }]}>
-                  {(th ? l.th : l.en)} ({c.done}/{c.total})
-                </Text>
-              </TouchableOpacity>
-              {canExpand && (
-                <TouchableOpacity
-                  style={styles.legendExpandBtn}
-                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                  onPress={() => setSpeciesPanelLayer(l.key)}
-                >
-                  <Text style={[styles.legendExpandIcon, on && styles.legendTextOn, !on && { color: l.color }]}>▤</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          );
-        })}
+        <TouchableOpacity style={[styles.mapPickBtn, styles.pickBtnHalf]} onPress={() => setFiltersOpen(true)}>
+          <Text style={styles.mapPickText} numberOfLines={1}>
+            {th ? "ตัวกรอง" : "Filters"} ({Object.values(visible).filter(Boolean).length}/{LAYER_DEFS.length})
+          </Text>
+          <Text style={styles.mapPickIcon}>▾</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.hideRowLine}>
@@ -666,6 +699,17 @@ export default function MapScreen() {
         />
       )}
 
+      {filtersOpen && (
+        <FiltersModal
+          locale={locale}
+          visible={visible}
+          counts={counts}
+          onToggleLayer={(key) => setVisible((v) => ({ ...v, [key]: !v[key] }))}
+          onOpenSpecies={(key) => setSpeciesPanelLayer(key)}
+          onClose={() => setFiltersOpen(false)}
+        />
+      )}
+
       {speciesPanelLayer && (
         <SpeciesBreakdownModal
           layer={speciesPanelLayer}
@@ -698,16 +742,17 @@ const styles = StyleSheet.create({
   localeText: { color: "#8A97AD", fontSize: 12, fontWeight: "bold" },
   localeTextOn: { color: "#FFFFFF" },
 
+  pickBtnRow: { flexDirection: "row", marginHorizontal: 16, marginTop: 10, gap: 8 },
+  pickBtnHalf: { flex: 1, marginHorizontal: 0, marginTop: 0 },
   mapPickBtn: { flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     marginHorizontal: 16, marginTop: 10, paddingHorizontal: 14, paddingVertical: 12,
     borderRadius: 10, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#DCE6F4" },
-  mapPickText: { color: "#41506B", fontSize: 16, fontWeight: "bold", flex: 1, marginRight: 8 },
+  mapPickText: { color: "#41506B", fontSize: 15, fontWeight: "bold", flex: 1, marginRight: 6 },
   mapPickIcon: { color: "#8A97AD", fontSize: 14, fontWeight: "bold" },
 
-  legendRow: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 10, marginTop: 10 },
-  legendChip: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, margin: 4, borderWidth: 1.5, backgroundColor: "#FFFFFF" },
-  legendText: { fontSize: 13, fontWeight: "bold" },
-  legendTextOn: { color: "#FFFFFF" },
+  filterRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 4,
+    borderBottomWidth: 1, borderBottomColor: "#E6EDF7" },
+  filterDot: { width: 12, height: 12, borderRadius: 999, marginRight: 10 },
   legendExpandBtn: { marginLeft: 6, paddingLeft: 6, borderLeftWidth: 1, borderLeftColor: "rgba(0,0,0,0.15)" },
   legendExpandIcon: { fontSize: 13, fontWeight: "bold" },
   speciesCount: { color: "#8A97AD", fontSize: 12, fontWeight: "bold", marginRight: 8 },
