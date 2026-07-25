@@ -1,30 +1,30 @@
 {
-  // Cloudflare Worker + Static Assets. The Worker (worker/index.js) runs first so
-  // it can gate /data and /media (self-hosted dataset + images) to same-origin
-  // requests only — deterring hotlinking/scraping. Everything else is served from
-  // ./dist as a normal static SPA.
-  "name": "row-appliacation",
-  "compatibility_date": "2025-06-01",
-  "main": "worker/index.js",
-  // page-view counter store
-  "kv_namespaces": [
-    { "binding": "VIEWS", "id": "973ebd5b050e4b85b1063a10266bb34f" }
-    // Add a second entry here for signed-in players' Maps progress once you've
-    // run `npx wrangler kv namespace create MAPS_SYNC` — see
-    // README-google-sync.md step 2. Deliberately NOT added yet: Cloudflare
-    // validates that KV namespace ids exist at deploy time, so a placeholder
-    // id here would fail every deploy (this whole site), not just this
-    // feature. Until this is added, the "Sign in with Google" button on the
-    // Maps tab does appear and sign-in itself works (real client id now
-    // hardcoded in worker/index.js), but sync requests 500 — isolated to
-    // that one endpoint, not the rest of the site — until this is filled in.
-  ],
-  "assets": {
-    "directory": "./dist",
-    "binding": "ASSETS",
-    // run the Worker before serving assets (otherwise static files bypass it)
-    "run_worker_first": true,
-    // SPA: unknown routes fall back to index.html
-    "not_found_handling": "single-page-application"
-  }
+	// Cloudflare Worker + Static Assets. The Worker (worker/index.js) runs first so
+	// it can gate /data and /media (self-hosted dataset + images) to same-origin
+	// requests only — deterring hotlinking/scraping. Everything else is served from
+	// ./dist as a normal static SPA.
+	"name": "row-appliacation",
+	"compatibility_date": "2025-06-01",
+	"main": "worker/index.js",
+	// page-view counter store
+	"kv_namespaces": [
+		{
+			"binding": "VIEWS",
+			"id": "973ebd5b050e4b85b1063a10266bb34f"
+		},
+		{
+			// Signed-in players' Maps progress (collected points, icon size,
+			// layer toggles, hide-collected) — see README-google-sync.md.
+			"binding": "MAPS_SYNC",
+			"id": "59c0ed52396f4b4f8ffe7306c96c76f3"
+		}
+	],
+	"assets": {
+		"directory": "./dist",
+		"binding": "ASSETS",
+		// run the Worker before serving assets (otherwise static files bypass it)
+		"run_worker_first": true,
+		// SPA: unknown routes fall back to index.html
+		"not_found_handling": "single-page-application"
+	}
 }

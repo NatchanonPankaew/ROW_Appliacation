@@ -6,46 +6,19 @@ The code for this is already in place (`src/api/googleSync.ts`, wired into
 Web only for now (Cloudflare + GitHub Pages), as agreed. Native would need
 separate OAuth clients per platform and a new native build.
 
-## Status
+## Status: done ✅
 
-- ✅ Google OAuth Web client created, hardcoded into both
+- Google OAuth Web client created, hardcoded into both
   `src/api/googleSync.ts` and `worker/index.js` (it's public by design —
   OAuth web client ids are meant to ship in frontend JS, so no env vars
   needed for this part).
-- ⬜ Cloudflare KV namespace (`MAPS_SYNC`) — **not created yet**. Until this
-  is done, the "Sign in with Google" button does appear and sign-in itself
-  works, but syncing 500s (isolated to that one endpoint, nothing else on
-  the site is affected).
+- Cloudflare KV namespace `MAPS_SYNC` created and wired into
+  `wrangler.jsonc`.
 
-## Remaining step: create the Cloudflare KV namespace
-
-In the project root, authenticate wrangler with your Cloudflare account
-first if you haven't (`npx wrangler login` — opens a browser):
-
-```
-npx wrangler login
-npx wrangler kv namespace create MAPS_SYNC
-```
-
-This prints an `id`. Open `wrangler.jsonc` and add a second entry to
-`kv_namespaces` (there's a comment marking where):
-
-```jsonc
-"kv_namespaces": [
-  { "binding": "VIEWS", "id": "973ebd5b050e4b85b1063a10266bb34f" },
-  { "binding": "MAPS_SYNC", "id": "<the id wrangler printed>" }
-],
-```
-
-Then push to `main` as usual — Cloudflare auto-deploys, GitHub Pages
-auto-deploys too. Once live, sync starts working immediately, no further
-setup.
-
-This wasn't pre-added with a placeholder on purpose — Cloudflare validates
-that every KV namespace id in this file actually exists *at deploy time*,
-for the whole site, not just this feature. A fake id here would fail every
-deploy (Cloudflare auto-deploys on every push to `main`), so it's left out
-until you have the real one.
+Setup is complete — once this deploys, the "Sign in with Google" button
+shows on the Maps tab and syncing works end to end. Nothing further to do
+unless you want native (Android/iOS) support later, which needs separate
+OAuth clients per platform and a new native build.
 
 ## What syncs
 
