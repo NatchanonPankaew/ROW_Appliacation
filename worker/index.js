@@ -85,13 +85,25 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    // simple page-view counter backed by Workers KV (binding: VIEWS)
+    // simple page-view counter backed by Workers KV (binding: VIEWS). Best
+    // effort — free-tier KV has a daily put() quota (1000/day), and this
+    // writes on every single page view, so it can run out on a busy day.
+    // Degrade to serving the last known count instead of throwing (which
+    // otherwise took down every page load, not just this counter, once the
+    // quota was hit — that's the bug this try/catch exists to prevent).
     if (url.pathname === "/api/views") {
-      let count = parseInt((await env.VIEWS.get("count")) || "0", 10) || 0;
+      let count = 0;
+      try {
+        count = parseInt((await env.VIEWS.get("count")) || "0", 10) || 0;
+      } catch {}
       // GET = read + increment (once per page load); HEAD/other = read only
       if (request.method === "GET") {
         count += 1;
-        await env.VIEWS.put("count", String(count));
+        try {
+          await env.VIEWS.put("count", String(count));
+        } catch {
+          count -= 1; // put() failed (e.g. quota) — report the last stored count, not a phantom increment
+        }
       }
       return new Response(JSON.stringify({ count }), { headers: CORS });
     }
