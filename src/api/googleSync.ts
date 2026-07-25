@@ -12,7 +12,17 @@
 // target env vars.
 import { Platform } from "react-native";
 
-const HOST = process.env.EXPO_PUBLIC_DATA_HOST ?? "";
+// The sync API only exists on the Cloudflare Worker (worker/index.js) — it's
+// server-side code, so it can't run on GitHub Pages (static file hosting,
+// no backend at all). EXPO_PUBLIC_DATA_HOST is the wrong constant to reuse
+// here even though it looks tempting: that one points at wherever the
+// *dataset mirror* should be fetched from (same-origin on Cloudflare,
+// absolute-to-Cloudflare on GitHub Pages) which is a different concern from
+// "where does the sync API live" (always Cloudflare, full stop). Hardcoded
+// absolute URL so a GitHub-Pages-hosted build still reaches the real API
+// instead of 404ing against its own (API-less) origin — the Worker's CORS
+// headers (access-control-allow-origin: *) already allow this cross-origin.
+const API_HOST = "https://row-appliacation.natpoppy26.workers.dev";
 const CLIENT_ID = "216272524109-64polq30f6gqg2oi5cdm7ke2e19v653o.apps.googleusercontent.com";
 
 export interface GoogleProfile { sub: string; email: string; name: string; picture?: string; }
@@ -104,7 +114,7 @@ export function signOutGoogle(): void {
 
 async function authedFetch(path: string, init?: RequestInit): Promise<Response> {
   if (!idToken) throw new Error("not signed in");
-  return fetch(HOST + path, {
+  return fetch(API_HOST + path, {
     ...init,
     headers: { ...(init?.headers || {}), Authorization: "Bearer " + idToken, "content-type": "application/json" },
   });

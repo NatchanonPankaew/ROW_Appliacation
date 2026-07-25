@@ -41,10 +41,13 @@ function Main() {
   const [views, setViews] = useState<number | null>(null);
   const active = TABS.find((t) => t.key === tab)!;
 
-  // page-view counter (Worker /api/views, KV-backed) — count once per load
+  // page-view counter (Worker /api/views, KV-backed) — count once per load.
+  // Always hits the Worker directly: it's server-side code that only runs
+  // on Cloudflare, so on a GitHub-Pages-hosted build EXPO_PUBLIC_DATA_HOST
+  // would point back at that (API-less) static host and 404 silently.
   useEffect(() => {
-    const url = (process.env.EXPO_PUBLIC_DATA_HOST ?? "") + "/api/views";
-    fetch(url).then((r) => r.json()).then((d) => setViews(d.count)).catch(() => {});
+    fetch("https://row-appliacation.natpoppy26.workers.dev/api/views")
+      .then((r) => r.json()).then((d) => setViews(d.count)).catch(() => {});
   }, []);
 
   return (
