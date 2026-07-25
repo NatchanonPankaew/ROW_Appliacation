@@ -28,17 +28,22 @@ const CORS = {
   "cache-control": "no-store",
 };
 
+// Must match src/api/googleSync.ts's CLIENT_ID — public by design (OAuth web
+// client ids are meant to ship in frontend JS), so hardcoded here too rather
+// than threaded through wrangler.jsonc vars.
+const GOOGLE_CLIENT_ID = "216272524109-64polq30f6gqg2oi5cdm7ke2e19v653o.apps.googleusercontent.com";
+
 // Verifies a Google Identity Services ID token by asking Google directly
 // (simplest correct option in a Worker — no JWKS fetch/cache/JWT-verify code
 // to maintain) and checks it was issued for *our* OAuth client, not someone
 // else's. Returns the token payload (has .sub, the stable per-Google-account
 // id we key synced data on) or null if it doesn't check out.
-async function verifyGoogleIdToken(idToken, env) {
+async function verifyGoogleIdToken(idToken) {
   if (!idToken) return null;
   const res = await fetch("https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(idToken));
   if (!res.ok) return null;
   const payload = await res.json();
-  if (!env.GOOGLE_CLIENT_ID || payload.aud !== env.GOOGLE_CLIENT_ID) return null;
+  if (payload.aud !== GOOGLE_CLIENT_ID) return null;
   return payload;
 }
 
@@ -52,7 +57,7 @@ async function handleMapsSync(request, env) {
     });
   }
   const idToken = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
-  const payload = await verifyGoogleIdToken(idToken, env);
+  const payload = await verifyGoogleIdToken(idToken);
   if (!payload) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: CORS });
   const uid = payload.sub;
 

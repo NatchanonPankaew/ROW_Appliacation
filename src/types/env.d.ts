@@ -4,6 +4,5 @@ declare const process: {
   env: {
     EXPO_PUBLIC_DATA_HOST?: string;
     EXPO_PUBLIC_APP_KEY?: string;
-    EXPO_PUBLIC_GOOGLE_CLIENT_ID?: string;
   } & Record<string, string | undefined>;
 };

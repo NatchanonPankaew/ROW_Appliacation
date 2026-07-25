@@ -4,14 +4,16 @@
 // endpoint (worker/index.js) — sign in on one device, everything's there
 // on the next instead of living only in that one browser's storage.
 //
-// One-time setup this depends on (not done by this file) — see
-// README-google-sync.md: a Google Cloud OAuth Web client id, a Cloudflare
-// KV namespace bound as MAPS_SYNC, and EXPO_PUBLIC_GOOGLE_CLIENT_ID set at
-// build time to that same client id.
+// One-time setup this still depends on — see README-google-sync.md: a
+// Cloudflare KV namespace bound as MAPS_SYNC. The client id below is public
+// by design (OAuth web client ids are meant to ship in frontend JS; only the
+// configured "Authorized JavaScript origins" and the consent screen actually
+// gate anything) so it's hardcoded rather than threaded through per-deploy-
+// target env vars.
 import { Platform } from "react-native";
 
 const HOST = process.env.EXPO_PUBLIC_DATA_HOST ?? "";
-const CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ?? "";
+const CLIENT_ID = "216272524109-64polq30f6gqg2oi5cdm7ke2e19v653o.apps.googleusercontent.com";
 
 export interface GoogleProfile { sub: string; email: string; name: string; picture?: string; }
 export interface MapsSyncRecord {

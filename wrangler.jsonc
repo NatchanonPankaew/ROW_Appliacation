@@ -14,16 +14,11 @@
     // README-google-sync.md step 2. Deliberately NOT added yet: Cloudflare
     // validates that KV namespace ids exist at deploy time, so a placeholder
     // id here would fail every deploy (this whole site), not just this
-    // feature. The /api/sync/maps route in worker/index.js already handles
-    // the binding being absent by 401-ing before it'd ever touch it.
+    // feature. Until this is added, the "Sign in with Google" button on the
+    // Maps tab does appear and sign-in itself works (real client id now
+    // hardcoded in worker/index.js), but sync requests 500 — isolated to
+    // that one endpoint, not the rest of the site — until this is filled in.
   ],
-  // Google OAuth Web client id (from Google Cloud Console) — public value,
-  // safe to commit once real. See README-google-sync.md step 3a. Sign-in
-  // just always fails token verification (safe 401) while this is a
-  // non-matching placeholder.
-  "vars": {
-    "GOOGLE_CLIENT_ID": "REPLACE_ME.apps.googleusercontent.com"
-  },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
