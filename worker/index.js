@@ -42,8 +42,9 @@ async function verifyGoogleIdToken(idToken, env) {
   return payload;
 }
 
-// Signed-in players' Maps progress (collected points + icon size preference),
-// keyed by their Google account id (KV binding: MAPS_SYNC). Web-only for now.
+// Signed-in players' Maps preferences (collected points, icon size, which
+// layers are shown/hidden, "hide collected" toggle), keyed by their Google
+// account id (KV binding: MAPS_SYNC). Web-only for now.
 async function handleMapsSync(request, env) {
   if (request.method === "OPTIONS") {
     return new Response(null, {
@@ -57,7 +58,7 @@ async function handleMapsSync(request, env) {
 
   if (request.method === "GET") {
     const stored = await env.MAPS_SYNC.get(uid);
-    return new Response(stored || JSON.stringify({ collected: {}, iconScale: null, updatedAt: 0 }), { headers: CORS });
+    return new Response(stored || JSON.stringify({ collected: {}, iconScale: null, visible: null, hideCollected: null, updatedAt: 0 }), { headers: CORS });
   }
   if (request.method === "POST") {
     const body = await request.json().catch(() => null);
@@ -65,6 +66,8 @@ async function handleMapsSync(request, env) {
     const record = {
       collected: body.collected && typeof body.collected === "object" ? body.collected : {},
       iconScale: typeof body.iconScale === "number" ? body.iconScale : null,
+      visible: body.visible && typeof body.visible === "object" ? body.visible : null,
+      hideCollected: typeof body.hideCollected === "boolean" ? body.hideCollected : null,
       updatedAt: Date.now(),
     };
     await env.MAPS_SYNC.put(uid, JSON.stringify(record));

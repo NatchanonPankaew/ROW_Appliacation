@@ -15,6 +15,8 @@ import {
 } from "../api/googleSync";
 
 const COLLECTED_STORAGE_KEY = "row_map_collected_points";
+const VISIBLE_STORAGE_KEY = "row_map_visible_layers";
+const HIDE_COLLECTED_STORAGE_KEY = "row_map_hide_collected";
 
 const LOCALES = ["en-US", "th-TH", "zh-TW"];
 
@@ -40,6 +42,12 @@ const LAYER_DEFS: { key: MapLayer; th: string; en: string; color: string }[] = [
 // count — tapping the chip's expand button opens a per-species breakdown
 // (own icon/name/count, individually toggleable) instead of one opaque total.
 const SPECIES_LAYERS: MapLayer[] = ["mvp", "elite", "mini"];
+
+function defaultVisible(): Record<MapLayer, boolean> {
+  const v = {} as Record<MapLayer, boolean>;
+  LAYER_DEFS.forEach((l) => { v[l.key] = true; });
+  return v;
+}
 
 interface SpeciesEntry { key: string; name: string; icon?: string; portrait?: string; total: number; done: number; }
 
@@ -318,11 +326,7 @@ export default function MapScreen() {
   const googleBtnRef = useRef<any>(null);
   const [speciesPanelLayer, setSpeciesPanelLayer] = useState<MapLayer | null>(null);
   const [hiddenSpecies, setHiddenSpecies] = useState<Record<string, boolean>>({});
-  const [visible, setVisible] = useState<Record<MapLayer, boolean>>(() => {
-    const v = {} as Record<MapLayer, boolean>;
-    LAYER_DEFS.forEach((l) => { v[l.key] = true; });
-    return v;
-  });
+  const [visible, setVisible] = useState<Record<MapLayer, boolean>>(defaultVisible);
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
   const [iconScale, setIconScale] = useState(DEFAULT_ICON_SCALE);
   const markerSizes = useMemo(() => {
@@ -473,6 +477,16 @@ export default function MapScreen() {
   useEffect(() => {
     loadJSON<number>(ICON_SCALE_STORAGE_KEY, DEFAULT_ICON_SCALE).then(setIconScale);
   }, []);
+
+  // Layer show/hide + "hide collected" are also per-player preferences —
+  // persisted the same way (and synced below once signed in) instead of
+  // resetting to all-visible every load.
+  useEffect(() => {
+    loadJSON<Record<MapLayer, boolean>>(VISIBLE_STORAGE_KEY, defaultVisible()).then(setVisible);
+    loadJSON<boolean>(HIDE_COLLECTED_STORAGE_KEY, false).then(setHideCollected);
+  }, []);
+  useEffect(() => { saveJSON(VISIBLE_STORAGE_KEY, visible); }, [visible]);
+  useEffect(() => { saveJSON(HIDE_COLLECTED_STORAGE_KEY, hideCollected); }, [hideCollected]);
   const stepIconScale = useCallback((dir: 1 | -1) => {
     setIconScale((prev) => {
       const i = ICON_SCALE_STEPS.indexOf(prev);
@@ -495,8 +509,8 @@ export default function MapScreen() {
 
   // On sign-in, merge whatever's already on the server with what's on this
   // device — union of collected points (never lose progress either side),
-  // server's icon-scale preference if it set one — then push the merged
-  // result back so both ends agree.
+  // server's icon-scale/layer-visibility/hide-collected preferences if it
+  // set any — then push the merged result back so both ends agree.
   const handleSignedIn = useCallback(async (p: GoogleProfile) => {
     setGoogleProfile(p);
     setSyncStatus("syncing");
@@ -510,6 +524,14 @@ export default function MapScreen() {
       if (server?.iconScale != null) {
         setIconScale(server.iconScale);
         saveJSON(ICON_SCALE_STORAGE_KEY, server.iconScale);
+      }
+      if (server?.visible != null) {
+        setVisible(server.visible as Record<MapLayer, boolean>);
+        saveJSON(VISIBLE_STORAGE_KEY, server.visible);
+      }
+      if (server?.hideCollected != null) {
+        setHideCollected(server.hideCollected);
+        saveJSON(HIDE_COLLECTED_STORAGE_KEY, server.hideCollected);
       }
       setSyncStatus("synced");
     } catch {
@@ -530,10 +552,10 @@ export default function MapScreen() {
     if (pushTimer.current) clearTimeout(pushTimer.current);
     pushTimer.current = setTimeout(() => {
       setSyncStatus("syncing");
-      pushMapsSync({ collected, iconScale }).then((ok) => setSyncStatus(ok ? "synced" : "error"));
+      pushMapsSync({ collected, iconScale, visible, hideCollected }).then((ok) => setSyncStatus(ok ? "synced" : "error"));
     }, 1500);
     return () => { if (pushTimer.current) clearTimeout(pushTimer.current); };
-  }, [collected, iconScale, googleProfile]);
+  }, [collected, iconScale, visible, hideCollected, googleProfile]);
 
   const handleSignOut = useCallback(() => {
     signOutGoogle();

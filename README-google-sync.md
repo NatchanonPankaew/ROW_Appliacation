@@ -77,8 +77,10 @@ further code changes needed.
 
 ## What syncs
 
-Only Maps progress: collected points and your icon-size preference. Nothing
-else in the app is linked to the account. On sign-in, the app merges
-whatever's already saved on the server with whatever's on that device (union
-of collected points — nothing gets lost either direction) and keeps pushing
-updates in the background afterward.
+Only Maps preferences: collected points, icon-size, which layers are shown/
+hidden, and the "hide collected points" toggle. Nothing else in the app is
+linked to the account. On sign-in, the app merges whatever's already saved
+on the server with whatever's on that device (union of collected points —
+nothing gets lost either direction; the other three preferences take the
+server's value if it has one) and keeps pushing updates in the background
+afterward.

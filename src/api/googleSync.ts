@@ -1,7 +1,8 @@
-// Google sign-in (web only) + syncing a signed-in player's Maps progress
-// (collected points + icon size) against the Cloudflare Worker's
-// /api/sync/maps endpoint (worker/index.js), so it follows them across
-// devices/browsers instead of living only in this one browser's storage.
+// Google sign-in (web only) + syncing a signed-in player's Maps preferences
+// (collected points, icon size, which layers are shown/hidden, "hide
+// collected" toggle) against the Cloudflare Worker's /api/sync/maps
+// endpoint (worker/index.js) — sign in on one device, everything's there
+// on the next instead of living only in that one browser's storage.
 //
 // One-time setup this depends on (not done by this file) — see
 // README-google-sync.md: a Google Cloud OAuth Web client id, a Cloudflare
@@ -13,7 +14,19 @@ const HOST = process.env.EXPO_PUBLIC_DATA_HOST ?? "";
 const CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ?? "";
 
 export interface GoogleProfile { sub: string; email: string; name: string; picture?: string; }
-export interface MapsSyncRecord { collected: Record<string, true>; iconScale: number | null; updatedAt: number; }
+export interface MapsSyncRecord {
+  collected: Record<string, true>;
+  iconScale: number | null;
+  visible: Record<string, boolean> | null;
+  hideCollected: boolean | null;
+  updatedAt: number;
+}
+export interface MapsSyncPush {
+  collected: Record<string, true>;
+  iconScale: number;
+  visible: Record<string, boolean>;
+  hideCollected: boolean;
+}
 
 // Google Identity Services signs each session with a fresh, short-lived (~1hr)
 // ID token rather than a long-lived session — kept in memory only (not
@@ -101,7 +114,7 @@ export async function pullMapsSync(): Promise<MapsSyncRecord | null> {
   return res.json();
 }
 
-export async function pushMapsSync(data: { collected: Record<string, true>; iconScale: number }): Promise<boolean> {
+export async function pushMapsSync(data: MapsSyncPush): Promise<boolean> {
   const res = await authedFetch("/api/sync/maps", { method: "POST", body: JSON.stringify(data) });
   return res.ok;
 }
