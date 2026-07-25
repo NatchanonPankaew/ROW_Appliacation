@@ -64,6 +64,20 @@ const ZOOM_STEP = 0.5;
 // back out to 50% themselves for an overview.
 const DEFAULT_ZOOM = 2;
 
+// Marker (pin) size at 100% icon scale — the crop-mask width/height and the
+// oversized icon rendered inside it (see markerHalo/markerIcon below for why
+// the icon is bigger than its own box). Actual on-screen size is these times
+// the user's chosen ICON_SCALE_STEPS value, since after enough rounds of
+// "bigger"/"smaller" requests this is now a setting players pick themselves
+// instead of a fixed value.
+const BASE_MARKER_SIZE = 40;
+const BASE_ICON_SIZE = 64;
+const BASE_EMOJI_SIZE = 27;
+const BASE_BADGE_SIZE = 20;
+const ICON_SCALE_STEPS = [0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.75, 2];
+const DEFAULT_ICON_SCALE = 1;
+const ICON_SCALE_STORAGE_KEY = "row_map_icon_scale";
+
 function MapPickerModal({
   maps, locale, onPick, onClose,
 }: { maps: PickableMap[]; locale: string; onPick: (m: PickableMap) => void; onClose: () => void }) {
@@ -254,6 +268,17 @@ export default function MapScreen() {
     return v;
   });
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
+  const [iconScale, setIconScale] = useState(DEFAULT_ICON_SCALE);
+  const markerSizes = useMemo(() => {
+    const size = BASE_MARKER_SIZE * iconScale;
+    return {
+      size,
+      wrap: { width: size, height: size, borderRadius: 999 },
+      icon: { width: BASE_ICON_SIZE * iconScale, height: BASE_ICON_SIZE * iconScale },
+      emojiFontSize: BASE_EMOJI_SIZE * iconScale,
+      badgeSize: BASE_BADGE_SIZE * iconScale,
+    };
+  }, [iconScale]);
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const [pan, setPan] = useState({ x: 0, y: 0 }); // top-left offset of content within the viewport, always <= 0
   const [mapAreaHeight, setMapAreaHeight] = useState<number | null>(null);
@@ -387,6 +412,21 @@ export default function MapScreen() {
     loadJSON<Record<string, true>>(COLLECTED_STORAGE_KEY, {}).then(setCollected);
   }, []);
 
+  // Icon size is a per-player preference (see the ICON_SCALE_STEPS comment
+  // above) — remembered across visits instead of resetting every load.
+  useEffect(() => {
+    loadJSON<number>(ICON_SCALE_STORAGE_KEY, DEFAULT_ICON_SCALE).then(setIconScale);
+  }, []);
+  const stepIconScale = useCallback((dir: 1 | -1) => {
+    setIconScale((prev) => {
+      const i = ICON_SCALE_STEPS.indexOf(prev);
+      const nextIndex = Math.min(ICON_SCALE_STEPS.length - 1, Math.max(0, (i === -1 ? 3 : i) + dir));
+      const next = ICON_SCALE_STEPS[nextIndex];
+      saveJSON(ICON_SCALE_STORAGE_KEY, next);
+      return next;
+    });
+  }, []);
+
   const toggleCollected = useCallback((key: string) => {
     setCollected((prev) => {
       const next = { ...prev };
@@ -497,12 +537,33 @@ export default function MapScreen() {
         })}
       </View>
 
-      <TouchableOpacity style={styles.hideRow} onPress={() => setHideCollected((h) => !h)}>
-        <View style={[styles.checkbox, hideCollected && styles.checkboxOn]}>
-          {hideCollected && <Text style={styles.checkboxMark}>✓</Text>}
+      <View style={styles.hideRowLine}>
+        <TouchableOpacity style={styles.hideRow} onPress={() => setHideCollected((h) => !h)}>
+          <View style={[styles.checkbox, hideCollected && styles.checkboxOn]}>
+            {hideCollected && <Text style={styles.checkboxMark}>✓</Text>}
+          </View>
+          <Text style={styles.hideRowText}>{th ? "ซ่อนจุดที่เก็บแล้ว" : "Hide collected points"}</Text>
+        </TouchableOpacity>
+
+        <View style={styles.iconScaleRow}>
+          <Text style={styles.hideRowText}>{th ? "ขนาดไอคอน" : "Icon size"}</Text>
+          <TouchableOpacity
+            style={[styles.iconScaleBtn, iconScale <= ICON_SCALE_STEPS[0] && styles.zoomBtnDisabled]}
+            onPress={() => stepIconScale(-1)}
+            disabled={iconScale <= ICON_SCALE_STEPS[0]}
+          >
+            <Text style={styles.iconScaleBtnText}>−</Text>
+          </TouchableOpacity>
+          <Text style={styles.iconScalePct}>{Math.round(iconScale * 100)}%</Text>
+          <TouchableOpacity
+            style={[styles.iconScaleBtn, iconScale >= ICON_SCALE_STEPS[ICON_SCALE_STEPS.length - 1] && styles.zoomBtnDisabled]}
+            onPress={() => stepIconScale(1)}
+            disabled={iconScale >= ICON_SCALE_STEPS[ICON_SCALE_STEPS.length - 1]}
+          >
+            <Text style={styles.iconScaleBtnText}>+</Text>
+          </TouchableOpacity>
         </View>
-        <Text style={styles.hideRowText}>{th ? "ซ่อนจุดที่เก็บแล้ว" : "Hide collected points"}</Text>
-      </TouchableOpacity>
+      </View>
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color="#E8B339" /></View>
@@ -543,22 +604,26 @@ export default function MapScreen() {
                   return (
                     <TouchableOpacity
                       key={m.key}
-                      style={[styles.marker, { left: `${left * 100}%`, top: `${top * 100}%` }, done && styles.markerDone]}
+                      style={[
+                        styles.marker,
+                        { left: `${left * 100}%`, top: `${top * 100}%`, width: markerSizes.size, height: markerSizes.size, marginLeft: -markerSizes.size / 2, marginTop: -markerSizes.size / 2 },
+                        done && styles.markerDone,
+                      ]}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       onPress={() => setSelectedMarker(m)}
                     >
-                      <View style={styles.markerShadowWrap}>
-                        <View style={styles.markerHalo}>
+                      <View style={[styles.markerShadowWrap, markerSizes.wrap]}>
+                        <View style={[styles.markerHalo, markerSizes.wrap]}>
                           {m.emoji ? (
-                            <Text style={styles.markerEmoji}>{m.emoji}</Text>
+                            <Text style={[styles.markerEmoji, { fontSize: markerSizes.emojiFontSize, lineHeight: markerSizes.emojiFontSize * 1.15 }]}>{m.emoji}</Text>
                           ) : (
-                            <Image source={{ uri: mapMarkIconUrl(m.icon!) }} style={styles.markerIcon} resizeMode="contain" />
+                            <Image source={{ uri: mapMarkIconUrl(m.icon!) }} style={markerSizes.icon} resizeMode="contain" />
                           )}
                         </View>
                       </View>
                       {done && (
-                        <View style={styles.markerDoneBadge}>
-                          <Text style={styles.markerDoneBadgeText}>✓</Text>
+                        <View style={[styles.markerDoneBadge, { width: markerSizes.badgeSize, height: markerSizes.badgeSize, top: -markerSizes.badgeSize / 5, right: -markerSizes.badgeSize / 5 }]}>
+                          <Text style={[styles.markerDoneBadgeText, { fontSize: markerSizes.badgeSize * 0.55 }]}>✓</Text>
                         </View>
                       )}
                     </TouchableOpacity>
@@ -648,12 +713,19 @@ const styles = StyleSheet.create({
   speciesCount: { color: "#8A97AD", fontSize: 12, fontWeight: "bold", marginRight: 8 },
   pickerRowTextOff: { color: "#B7C2D6" },
 
-  hideRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, marginTop: 8 },
+  hideRowLine: { flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16, marginTop: 8, flexWrap: "wrap" },
+  hideRow: { flexDirection: "row", alignItems: "center" },
   checkbox: { width: 18, height: 18, borderRadius: 4, borderWidth: 1.5, borderColor: "#C9D6EE",
     backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", marginRight: 8 },
   checkboxOn: { backgroundColor: "#6E83E8", borderColor: "#6E83E8" },
   checkboxMark: { color: "#FFFFFF", fontSize: 12, fontWeight: "bold" },
   hideRowText: { color: "#5A6781", fontSize: 13, fontWeight: "600" },
+  iconScaleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  iconScaleBtn: { width: 24, height: 24, borderRadius: 6, backgroundColor: "#FFFFFF",
+    borderWidth: 1, borderColor: "#DCE6F4", alignItems: "center", justifyContent: "center" },
+  iconScaleBtnText: { color: "#41506B", fontSize: 15, fontWeight: "bold" },
+  iconScalePct: { color: "#8A97AD", fontSize: 12, fontWeight: "bold", minWidth: 34, textAlign: "center" },
 
   zoomControls: { position: "absolute", right: 16, bottom: 16, alignItems: "center",
     backgroundColor: "#FFFFFF", borderRadius: 12, borderWidth: 1, borderColor: "#DCE6F4",
@@ -664,7 +736,10 @@ const styles = StyleSheet.create({
   zoomBtnText: { color: "#41506B", fontSize: 20, fontWeight: "bold" },
   zoomPct: { color: "#8A97AD", fontSize: 11, fontWeight: "bold", paddingVertical: 2 },
 
-  marker: { position: "absolute", width: 40, height: 40, marginLeft: -20, marginTop: -20 },
+  // Actual marker/icon dimensions are computed from the player's chosen
+  // iconScale (see markerSizes) and merged in at render time — these entries
+  // only hold the size-independent structure.
+  marker: { position: "absolute" },
   // The source mark icons themselves have heavy transparent padding baked
   // in (the actual chest/mark art only fills their center ~55% or so), so
   // sizing the <Image> to match the marker left a small-looking icon no
@@ -673,16 +748,13 @@ const styles = StyleSheet.create({
   // past its own bounds — the clip crops away the source's own padding, so
   // what's left fills the marker spot. The drop shadow moves to an outer,
   // non-clipping wrapper since overflow:hidden would otherwise cut it off.
-  markerShadowWrap: { width: 40, height: 40, borderRadius: 999,
-    shadowColor: "#000", shadowOpacity: 0.35, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 3 },
-  markerHalo: { width: 40, height: 40, borderRadius: 999,
-    alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  markerIcon: { width: 64, height: 64 },
-  markerEmoji: { fontSize: 27, lineHeight: 31 },
+  markerShadowWrap: { shadowColor: "#000", shadowOpacity: 0.35, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 3 },
+  markerHalo: { alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  markerEmoji: {},
   markerDone: { opacity: 0.4 },
-  markerDoneBadge: { position: "absolute", top: -4, right: -4, width: 20, height: 20, borderRadius: 999,
+  markerDoneBadge: { position: "absolute", borderRadius: 999,
     backgroundColor: "#3FA35A", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#FFFFFF" },
-  markerDoneBadgeText: { color: "#FFFFFF", fontSize: 11, fontWeight: "bold", lineHeight: 13 },
+  markerDoneBadgeText: { color: "#FFFFFF", fontWeight: "bold" },
   hint: { color: "#8A97AD", fontSize: 12, marginTop: 8, textAlign: "center", paddingHorizontal: 16 },
 
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
