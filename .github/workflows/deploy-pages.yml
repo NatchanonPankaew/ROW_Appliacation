@@ -33,6 +33,10 @@ jobs:
       - name: Build web export (GitHub Pages project-site subpath)
         env:
           EXPO_PUBLIC_DATA_HOST: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+          # Empty until you set the GOOGLE_CLIENT_ID repo variable (Settings
+          # > Secrets and variables > Actions > Variables) — see
+          # README-google-sync.md. Sign-in stays hidden while empty.
+          EXPO_PUBLIC_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
         run: npm run build:web
 
       - name: Rewrite root-absolute asset paths for the /repo-name/ subpath

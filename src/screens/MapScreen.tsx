@@ -10,6 +10,9 @@ import {
 } from "../api/mapData";
 import { loadJSON, saveJSON } from "../api/storage";
 import { MYSTERY_SUBTYPE_INFO } from "../api/communityMysteryChests";
+import {
+  isGoogleSyncConfigured, renderGoogleSignIn, signOutGoogle, pullMapsSync, pushMapsSync, GoogleProfile,
+} from "../api/googleSync";
 
 const COLLECTED_STORAGE_KEY = "row_map_collected_points";
 
@@ -310,6 +313,9 @@ export default function MapScreen() {
   const [selectedMarker, setSelectedMarker] = useState<MapMarker | null>(null);
   const [collected, setCollected] = useState<Record<string, true>>({});
   const [hideCollected, setHideCollected] = useState(false);
+  const [googleProfile, setGoogleProfile] = useState<GoogleProfile | null>(null);
+  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "synced" | "error">("idle");
+  const googleBtnRef = useRef<any>(null);
   const [speciesPanelLayer, setSpeciesPanelLayer] = useState<MapLayer | null>(null);
   const [hiddenSpecies, setHiddenSpecies] = useState<Record<string, boolean>>({});
   const [visible, setVisible] = useState<Record<MapLayer, boolean>>(() => {
@@ -487,6 +493,54 @@ export default function MapScreen() {
     });
   }, []);
 
+  // On sign-in, merge whatever's already on the server with what's on this
+  // device — union of collected points (never lose progress either side),
+  // server's icon-scale preference if it set one — then push the merged
+  // result back so both ends agree.
+  const handleSignedIn = useCallback(async (p: GoogleProfile) => {
+    setGoogleProfile(p);
+    setSyncStatus("syncing");
+    try {
+      const server = await pullMapsSync();
+      setCollected((localCollected) => {
+        const merged = { ...localCollected, ...(server?.collected || {}) };
+        saveJSON(COLLECTED_STORAGE_KEY, merged);
+        return merged;
+      });
+      if (server?.iconScale != null) {
+        setIconScale(server.iconScale);
+        saveJSON(ICON_SCALE_STORAGE_KEY, server.iconScale);
+      }
+      setSyncStatus("synced");
+    } catch {
+      setSyncStatus("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isGoogleSyncConfigured()) return;
+    renderGoogleSignIn(googleBtnRef.current, handleSignedIn);
+  }, [handleSignedIn]);
+
+  // Push local changes up once signed in, debounced so rapid toggling
+  // (checking off several points in a row) doesn't fire a request per tap.
+  const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!googleProfile) return;
+    if (pushTimer.current) clearTimeout(pushTimer.current);
+    pushTimer.current = setTimeout(() => {
+      setSyncStatus("syncing");
+      pushMapsSync({ collected, iconScale }).then((ok) => setSyncStatus(ok ? "synced" : "error"));
+    }, 1500);
+    return () => { if (pushTimer.current) clearTimeout(pushTimer.current); };
+  }, [collected, iconScale, googleProfile]);
+
+  const handleSignOut = useCallback(() => {
+    signOutGoogle();
+    setGoogleProfile(null);
+    setSyncStatus("idle");
+  }, []);
+
   useEffect(() => { load(locale); }, [locale, load]);
 
   const pickableMaps = useMemo<PickableMap[]>(() => {
@@ -553,6 +607,25 @@ export default function MapScreen() {
           </TouchableOpacity>
         ))}
       </View>
+
+      {isGoogleSyncConfigured() && (
+        <View style={styles.accountRow}>
+          {googleProfile ? (
+            <>
+              <Text style={styles.accountText} numberOfLines={1}>
+                {(th ? "ซิงก์เป็น " : "Synced as ") + googleProfile.email}
+                {syncStatus === "syncing" ? " ⏳" : syncStatus === "error" ? " ⚠️" : " ✓"}
+              </Text>
+              <TouchableOpacity onPress={handleSignOut}>
+                <Text style={styles.accountSignOut}>{th ? "ออกจากระบบ" : "Sign out"}</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            // Google Identity Services renders its own button into this node.
+            <View ref={googleBtnRef} />
+          )}
+        </View>
+      )}
 
       <View style={styles.pickBtnRow}>
         <TouchableOpacity style={[styles.mapPickBtn, styles.pickBtnHalf]} onPress={() => setPickerOpen(true)}>
@@ -741,6 +814,11 @@ const styles = StyleSheet.create({
   localeChipOn: { backgroundColor: "#6E83E8", borderColor: "#6E83E8" },
   localeText: { color: "#8A97AD", fontSize: 12, fontWeight: "bold" },
   localeTextOn: { color: "#FFFFFF" },
+
+  accountRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16, marginTop: 8, minHeight: 24 },
+  accountText: { flex: 1, color: "#5A6781", fontSize: 12, fontWeight: "600", marginRight: 8 },
+  accountSignOut: { color: "#6E83E8", fontSize: 12, fontWeight: "bold" },
 
   pickBtnRow: { flexDirection: "row", marginHorizontal: 16, marginTop: 10, gap: 8 },
   pickBtnHalf: { flex: 1, marginHorizontal: 0, marginTop: 0 },

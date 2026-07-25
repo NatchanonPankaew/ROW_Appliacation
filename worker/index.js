@@ -22,24 +22,73 @@ function allowed(request, url) {
   return ref.includes(host) || origin.includes(host);
 }
 
+const CORS = {
+  "content-type": "application/json",
+  "access-control-allow-origin": "*",
+  "cache-control": "no-store",
+};
+
+// Verifies a Google Identity Services ID token by asking Google directly
+// (simplest correct option in a Worker — no JWKS fetch/cache/JWT-verify code
+// to maintain) and checks it was issued for *our* OAuth client, not someone
+// else's. Returns the token payload (has .sub, the stable per-Google-account
+// id we key synced data on) or null if it doesn't check out.
+async function verifyGoogleIdToken(idToken, env) {
+  if (!idToken) return null;
+  const res = await fetch("https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(idToken));
+  if (!res.ok) return null;
+  const payload = await res.json();
+  if (!env.GOOGLE_CLIENT_ID || payload.aud !== env.GOOGLE_CLIENT_ID) return null;
+  return payload;
+}
+
+// Signed-in players' Maps progress (collected points + icon size preference),
+// keyed by their Google account id (KV binding: MAPS_SYNC). Web-only for now.
+async function handleMapsSync(request, env) {
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      headers: { ...CORS, "access-control-allow-methods": "GET,POST,OPTIONS", "access-control-allow-headers": "authorization,content-type" },
+    });
+  }
+  const idToken = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  const payload = await verifyGoogleIdToken(idToken, env);
+  if (!payload) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: CORS });
+  const uid = payload.sub;
+
+  if (request.method === "GET") {
+    const stored = await env.MAPS_SYNC.get(uid);
+    return new Response(stored || JSON.stringify({ collected: {}, iconScale: null, updatedAt: 0 }), { headers: CORS });
+  }
+  if (request.method === "POST") {
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object") return new Response(JSON.stringify({ error: "bad body" }), { status: 400, headers: CORS });
+    const record = {
+      collected: body.collected && typeof body.collected === "object" ? body.collected : {},
+      iconScale: typeof body.iconScale === "number" ? body.iconScale : null,
+      updatedAt: Date.now(),
+    };
+    await env.MAPS_SYNC.put(uid, JSON.stringify(record));
+    return new Response(JSON.stringify({ ok: true }), { headers: CORS });
+  }
+  return new Response("Method not allowed", { status: 405, headers: CORS });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
     // simple page-view counter backed by Workers KV (binding: VIEWS)
     if (url.pathname === "/api/views") {
-      const cors = {
-        "content-type": "application/json",
-        "access-control-allow-origin": "*",
-        "cache-control": "no-store",
-      };
       let count = parseInt((await env.VIEWS.get("count")) || "0", 10) || 0;
       // GET = read + increment (once per page load); HEAD/other = read only
       if (request.method === "GET") {
         count += 1;
         await env.VIEWS.put("count", String(count));
       }
-      return new Response(JSON.stringify({ count }), { headers: cors });
+      return new Response(JSON.stringify({ count }), { headers: CORS });
+    }
+    if (url.pathname === "/api/sync/maps") {
+      return handleMapsSync(request, env);
     }
     // Gate the JSON dataset only. Images (/media) stay open so native <Image>
     // (which can't attach the app-key header) can still load them.

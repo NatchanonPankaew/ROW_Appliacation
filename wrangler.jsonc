@@ -9,7 +9,21 @@
   // page-view counter store
   "kv_namespaces": [
     { "binding": "VIEWS", "id": "973ebd5b050e4b85b1063a10266bb34f" }
+    // Add a second entry here for signed-in players' Maps progress once you've
+    // run `npx wrangler kv namespace create MAPS_SYNC` — see
+    // README-google-sync.md step 2. Deliberately NOT added yet: Cloudflare
+    // validates that KV namespace ids exist at deploy time, so a placeholder
+    // id here would fail every deploy (this whole site), not just this
+    // feature. The /api/sync/maps route in worker/index.js already handles
+    // the binding being absent by 401-ing before it'd ever touch it.
   ],
+  // Google OAuth Web client id (from Google Cloud Console) — public value,
+  // safe to commit once real. See README-google-sync.md step 3a. Sign-in
+  // just always fails token verification (safe 401) while this is a
+  // non-matching placeholder.
+  "vars": {
+    "GOOGLE_CLIENT_ID": "REPLACE_ME.apps.googleusercontent.com"
+  },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
