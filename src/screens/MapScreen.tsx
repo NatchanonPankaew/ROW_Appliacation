@@ -670,7 +670,7 @@ const styles = StyleSheet.create({
   zoomBtnText: { color: "#41506B", fontSize: 20, fontWeight: "bold" },
   zoomPct: { color: "#8A97AD", fontSize: 11, fontWeight: "bold", paddingVertical: 2 },
 
-  marker: { position: "absolute", width: 42, height: 42, marginLeft: -21, marginTop: -21 },
+  marker: { position: "absolute", width: 20, height: 20, marginLeft: -10, marginTop: -10 },
   // The source mark icons themselves have heavy transparent padding baked
   // in (the actual chest/mark art only fills their center ~55% or so), so
   // sizing the <Image> to match the halo left a wide ring of white behind a
@@ -679,16 +679,16 @@ const styles = StyleSheet.create({
   // clip crops away the source's own padding, so what's left fills the
   // circle. The drop shadow moves to an outer, non-clipping wrapper since
   // overflow:hidden would otherwise cut the shadow off too.
-  markerShadowWrap: { width: 42, height: 42, borderRadius: 999,
+  markerShadowWrap: { width: 20, height: 20, borderRadius: 999,
     shadowColor: "#000", shadowOpacity: 0.35, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 3 },
-  markerHalo: { width: 42, height: 42, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.95)",
-    borderWidth: 1.5, alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  markerIcon: { width: 68, height: 68 },
-  markerEmoji: { fontSize: 26, lineHeight: 30 },
+  markerHalo: { width: 20, height: 20, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.95)",
+    borderWidth: 1, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  markerIcon: { width: 32, height: 32 },
+  markerEmoji: { fontSize: 13, lineHeight: 16 },
   markerDone: { opacity: 0.4 },
-  markerDoneBadge: { position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: 999,
+  markerDoneBadge: { position: "absolute", top: -3, right: -3, width: 11, height: 11, borderRadius: 999,
     backgroundColor: "#3FA35A", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#FFFFFF" },
-  markerDoneBadgeText: { color: "#FFFFFF", fontSize: 10, fontWeight: "bold", lineHeight: 12 },
+  markerDoneBadgeText: { color: "#FFFFFF", fontSize: 7, fontWeight: "bold", lineHeight: 9 },
   hint: { color: "#8A97AD", fontSize: 12, marginTop: 8, textAlign: "center", paddingHorizontal: 16 },
 
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
