@@ -294,7 +294,7 @@ export async function fetchMarkersByScene(locale: string): Promise<Map<number, M
       layer: "pet_capture",
       key: "pet_capture_" + i,
       name: th ? "จุดจับสัตว์เลี้ยง (โดยประมาณ)" : "Pet capture point (approximate)",
-      petIcon: p.petIcon,
+      emoji: "🐾",
       x: p.x,
       z: p.z,
     });
