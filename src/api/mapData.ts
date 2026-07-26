@@ -4,7 +4,6 @@
 // worldXZToNaturalPixels() so markers land in the same spot as upstream.
 import { BASE_DATA, BASE_IMG, getJSON } from "./roworlddb";
 import { COMMUNITY_MYSTERY_CHESTS, MYSTERY_SUBTYPE_INFO, CommunityChestPoint } from "./communityMysteryChests";
-import { PET_CAPTURE_POINTS } from "./petCapturePoints";
 
 export interface WorldMapEntry {
   world_map_id: number;
@@ -62,7 +61,7 @@ interface PlacingRaw {
 export type MapLayer =
   | "mvp" | "elite" | "mini" | "card" | "recipe"
   | "expl_chest" | "guard_chest" | "monster_chest" | "mystery_chest" | "landmark" | "kafra"
-  | "observation" | "private_chef" | "quest_mark" | "rw_quest" | "pet_capture";
+  | "observation" | "private_chef" | "quest_mark" | "rw_quest";
 
 // interactive_placing file name for each placing-based layer (everything
 // except the monster-spawn families).
@@ -88,7 +87,7 @@ export interface MapMarker {
   icon?: string;         // /media/images/map_mark/<icon>.webp
   emoji?: string;        // used instead of icon when there's no in-game mark icon for this layer
   portrait?: string;     // /media/images/monster/<portrait>.webp (monsters only)
-  petIcon?: string;      // /media/images/pet/<petIcon>.webp (pet_capture only)
+  petIcon?: string;      // /media/images/pet/<petIcon>.webp — unused for now (pet capture layer pulled pending better source data), kept for when it returns
   x: number;             // world X
   z: number;             // world Z
   reward?: CardRewardItem[];
@@ -285,19 +284,6 @@ export async function fetchMarkersByScene(locale: string): Promise<Map<number, M
         });
       }
     }
-  });
-
-  // See petCapturePoints.ts — approximate, hand-transcribed from community
-  // screenshots (no authoritative source exists for this layer).
-  PET_CAPTURE_POINTS.forEach((p, i) => {
-    push(p.sceneId, {
-      layer: "pet_capture",
-      key: "pet_capture_" + i,
-      name: th ? "จุดจับสัตว์เลี้ยง (โดยประมาณ)" : "Pet capture point (approximate)",
-      emoji: "🐾",
-      x: p.x,
-      z: p.z,
-    });
   });
 
   return byScene;

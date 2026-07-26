@@ -33,7 +33,6 @@ const LAYER_DEFS: { key: MapLayer; th: string; en: string; color: string }[] = [
   { key: "private_chef", th: "เชฟส่วนตัว", en: "Private Chef", color: "#C2185B" },
   { key: "quest_mark", th: "เควสเรื่องราว", en: "Story Quest", color: "#7CB342" },
   { key: "rw_quest", th: "เควสภารกิจ", en: "World Tour Quest", color: "#00897B" },
-  { key: "pet_capture", th: "จุดจับสัตว์เลี้ยง", en: "Pet Capture", color: "#F06292" },
   { key: "mvp", th: "MVP", en: "MVP", color: "#A65CD6" },
   { key: "elite", th: "Elite", en: "Elite", color: "#E0533D" },
   { key: "mini", th: "Mini", en: "Mini", color: "#5DBB63" },
