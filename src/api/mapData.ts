@@ -88,6 +88,7 @@ export interface MapMarker {
   icon?: string;         // /media/images/map_mark/<icon>.webp
   emoji?: string;        // used instead of icon when there's no in-game mark icon for this layer
   portrait?: string;     // /media/images/monster/<portrait>.webp (monsters only)
+  petIcon?: string;      // /media/images/pet/<petIcon>.webp (pet_capture only)
   x: number;             // world X
   z: number;             // world Z
   reward?: CardRewardItem[];
@@ -293,7 +294,7 @@ export async function fetchMarkersByScene(locale: string): Promise<Map<number, M
       layer: "pet_capture",
       key: "pet_capture_" + i,
       name: th ? "จุดจับสัตว์เลี้ยง (โดยประมาณ)" : "Pet capture point (approximate)",
-      emoji: "🐾",
+      petIcon: p.petIcon,
       x: p.x,
       z: p.z,
     });
@@ -304,6 +305,9 @@ export async function fetchMarkersByScene(locale: string): Promise<Map<number, M
 
 export function mapMarkIconUrl(icon: string): string {
   return BASE_IMG + "map_mark/" + icon + ".webp";
+}
+export function petPortraitUrl(icon: string): string {
+  return BASE_IMG + "pet/" + icon + ".webp";
 }
 export function monsterPortraitUrl(portrait: string): string {
   return BASE_IMG + "monster/" + portrait + ".webp";

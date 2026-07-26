@@ -4,7 +4,7 @@ import {
   TextInput, FlatList, ActivityIndicator, useWindowDimensions, Platform, PanResponder,
 } from "react-native";
 import {
-  fetchMapIndex, fetchMarkersByScene, mapMarkIconUrl, monsterPortraitUrl,
+  fetchMapIndex, fetchMarkersByScene, mapMarkIconUrl, monsterPortraitUrl, petPortraitUrl,
   mapBackgroundUrl, rewardItemIconUrl, worldToImageFraction,
   MapConfig, MapMarker, MapLayer,
 } from "../api/mapData";
@@ -245,6 +245,8 @@ function MarkerModal({
               </View>
             ) : marker.portrait ? (
               <Image source={{ uri: monsterPortraitUrl(marker.portrait) }} style={styles.markerPortrait} resizeMode="contain" />
+            ) : marker.petIcon ? (
+              <Image source={{ uri: petPortraitUrl(marker.petIcon) }} style={styles.markerPortrait} resizeMode="contain" />
             ) : (
               <Image source={{ uri: mapMarkIconUrl(marker.icon!) }} style={styles.markerPortrait} resizeMode="contain" />
             )}
@@ -620,6 +622,8 @@ export default function MapScreen() {
             <View style={[styles.markerHalo, markerSizes.wrap]}>
               {m.emoji ? (
                 <Text style={[styles.markerEmoji, { fontSize: markerSizes.emojiFontSize, lineHeight: markerSizes.emojiFontSize * 1.15 }]}>{m.emoji}</Text>
+              ) : m.petIcon ? (
+                <Image source={{ uri: petPortraitUrl(m.petIcon) }} style={markerSizes.icon} resizeMode="contain" />
               ) : (
                 <Image source={{ uri: mapMarkIconUrl(m.icon!) }} style={markerSizes.icon} resizeMode="contain" />
               )}
