@@ -43,6 +43,15 @@ const LAYER_DEFS: { key: MapLayer; th: string; en: string; color: string }[] = [
 // (own icon/name/count, individually toggleable) instead of one opaque total.
 const SPECIES_LAYERS: MapLayer[] = ["mvp", "elite", "mini"];
 
+// Tapping these layers toggles "collected" immediately, no modal — they're
+// simple pickups with nothing worth reviewing first. Cards and monster
+// spawns keep the modal (reward/level info, or just identifying which
+// monster) since the user explicitly wants those to stay a deliberate step.
+const QUICK_COLLECT_LAYERS: MapLayer[] = [
+  "expl_chest", "guard_chest", "monster_chest", "mystery_chest", "landmark",
+  "kafra", "observation", "private_chef", "quest_mark", "rw_quest", "recipe",
+];
+
 function defaultVisible(): Record<MapLayer, boolean> {
   const v = {} as Record<MapLayer, boolean>;
   LAYER_DEFS.forEach((l) => { v[l.key] = true; });
@@ -593,6 +602,19 @@ export default function MapScreen() {
 
   const currentCfg = sceneId != null ? configs[String(sceneId)] : null;
   const currentMarkers = sceneId != null ? (markersByScene.get(sceneId) || []) : [];
+
+  // Card list (left-side panel) taps this to jump to that card's spot —
+  // pans (and zooms in a bit, if not already closer) so it's centered and
+  // clearly visible, without marking anything or opening its modal.
+  const focusOnMarker = useCallback((m: MapMarker) => {
+    if (!currentCfg) return;
+    const { left, top } = worldToImageFraction(currentCfg, m.x, m.z);
+    const nz = Math.max(zoomRef.current, 2.5);
+    const w = natW * baseScale * nz, h = natH * baseScale * nz;
+    const { viewport: v } = sizeRef.current;
+    setZoom(nz);
+    setPan(clampPan({ x: v.w / 2 - left * w, y: v.h / 2 - top * h }, { w, h }, v));
+  }, [currentCfg, natW, natH, baseScale]);
   // Memoized so panning (which only changes `pan`, not any of these) reuses
   // the same array reference — see markerElements below for why that matters.
   const visibleMarkers = useMemo(
@@ -600,6 +622,17 @@ export default function MapScreen() {
       visible[m.layer] && !(m.speciesKey && hiddenSpecies[m.speciesKey]) && !(hideCollected && collected[m.key])
     ),
     [currentMarkers, visible, hiddenSpecies, hideCollected, collected]
+  );
+
+  // Left-side card list panel: cards are worth reviewing individually (each
+  // is a distinct collectible with its own name), so instead of quick-collect
+  // or hunting them one at a time on the map, list them all and let tapping
+  // an entry just jump the map to it — collecting still happens via the
+  // marker's own popup, per the user's explicit choice to keep that a
+  // deliberate step for cards.
+  const cardMarkers = useMemo(
+    () => visibleMarkers.filter((m) => m.layer === "card"),
+    [visibleMarkers]
   );
 
   // Panning re-renders MapScreen on every pointer-move frame (pan.x/pan.y
@@ -624,7 +657,7 @@ export default function MapScreen() {
             done && styles.markerDone,
           ]}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          onPress={() => setSelectedMarker(m)}
+          onPress={() => (QUICK_COLLECT_LAYERS.includes(m.layer) ? toggleCollected(m.key) : setSelectedMarker(m))}
         >
           <View style={[styles.markerShadowWrap, markerSizes.wrap]}>
             <View style={[styles.markerHalo, markerSizes.wrap]}>
@@ -645,7 +678,7 @@ export default function MapScreen() {
         </TouchableOpacity>
       );
     });
-  }, [visibleMarkers, currentCfg, collected, markerSizes]);
+  }, [visibleMarkers, currentCfg, collected, markerSizes, toggleCollected]);
 
   const counts = useMemo(() => {
     const c = {} as Record<MapLayer, { total: number; done: number }>;
@@ -796,6 +829,29 @@ export default function MapScreen() {
               </View>
             </View>
 
+            {cardMarkers.length > 0 && (
+              <View style={styles.cardPanel}>
+                <Text style={styles.cardPanelTitle}>{th ? "การ์ดในแมพนี้" : "Cards on this map"}</Text>
+                <FlatList
+                  data={cardMarkers}
+                  keyExtractor={(m) => m.key}
+                  style={{ maxHeight: "100%" }}
+                  renderItem={({ item }) => {
+                    const done = !!collected[item.key];
+                    return (
+                      <TouchableOpacity style={styles.cardPanelRow} onPress={() => focusOnMarker(item)}>
+                        <Image source={{ uri: mapMarkIconUrl(item.icon!) }} style={styles.cardPanelThumb} resizeMode="contain" />
+                        <Text style={[styles.cardPanelRowText, done && styles.pickerRowTextOff]} numberOfLines={2}>
+                          {item.name}
+                        </Text>
+                        {done && <Text style={styles.cardPanelDoneMark}>✓</Text>}
+                      </TouchableOpacity>
+                    );
+                  }}
+                />
+              </View>
+            )}
+
             <View style={styles.zoomControls}>
               <TouchableOpacity
                 style={[styles.zoomBtn, zoom >= MAX_ZOOM && styles.zoomBtnDisabled]}
@@ -907,6 +963,15 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "#DCE6F4", alignItems: "center", justifyContent: "center" },
   iconScaleBtnText: { color: "#41506B", fontSize: 15, fontWeight: "bold" },
   iconScalePct: { color: "#8A97AD", fontSize: 12, fontWeight: "bold", minWidth: 34, textAlign: "center" },
+
+  cardPanel: { position: "absolute", left: 8, top: 8, bottom: 8, width: 148,
+    backgroundColor: "rgba(20,28,46,0.82)", borderRadius: 10, padding: 6 },
+  cardPanelTitle: { color: "#FFFFFF", fontSize: 11, fontWeight: "bold", marginBottom: 4, paddingHorizontal: 4 },
+  cardPanelRow: { flexDirection: "row", alignItems: "center", paddingVertical: 6, paddingHorizontal: 4,
+    borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.12)" },
+  cardPanelThumb: { width: 26, height: 26, marginRight: 6 },
+  cardPanelRowText: { flex: 1, color: "#FFFFFF", fontSize: 11, fontWeight: "600" },
+  cardPanelDoneMark: { color: "#3FA35A", fontSize: 13, fontWeight: "bold", marginLeft: 4 },
 
   zoomControls: { position: "absolute", right: 16, bottom: 16, alignItems: "center",
     backgroundColor: "#FFFFFF", borderRadius: 12, borderWidth: 1, borderColor: "#DCE6F4",
