@@ -286,6 +286,30 @@ export async function fetchMarkersByScene(locale: string): Promise<Map<number, M
     }
   });
 
+  // Community-only fallback: a scene roworlddb's own mystery_chest.json has
+  // zero entries for (confirmed via testing: Geffen River/10141) would
+  // otherwise show nothing at all even with tracker points available for
+  // it, since the enrichment above only ever attaches to an existing
+  // authoritative marker. Only kicks in when a scene has NO authoritative
+  // mystery_chest coverage, so it can't inflate a count that already
+  // matches roworlddb exactly elsewhere.
+  for (const [sceneId, cands] of communityByScene) {
+    const hasAuthoritative = (byScene.get(sceneId) || []).some((m) => m.layer === "mystery_chest");
+    if (hasAuthoritative) continue;
+    cands.forEach((c, i) => {
+      const info = MYSTERY_SUBTYPE_INFO[c.subtype];
+      push(sceneId, {
+        layer: "mystery_chest",
+        key: "mystery_community_" + sceneId + "_" + i,
+        name: th ? info.th : info.en,
+        emoji: info.emoji,
+        mysterySubtype: c.subtype,
+        x: c.x,
+        z: c.z,
+      });
+    });
+  }
+
   return byScene;
 }
 
