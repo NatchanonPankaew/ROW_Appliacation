@@ -316,6 +316,7 @@ export default function MapScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [configs, setConfigs] = useState<Record<string, MapConfig>>({});
+  const [worldMapNames, setWorldMapNames] = useState<Record<number, string>>({});
   const [markersByScene, setMarkersByScene] = useState<Map<number, MapMarker[]>>(new Map());
   const [sceneId, setSceneId] = useState<number | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -458,6 +459,13 @@ export default function MapScreen() {
     try {
       const [idx, byScene] = await Promise.all([fetchMapIndex(loc), fetchMarkersByScene(loc)]);
       setConfigs(idx.map_configs || {});
+      // Some map_configs entries have a null `name` (e.g. scene 99, Novice
+      // Village) even though they have real markers and a proper name in
+      // world_maps — without this fallback those scenes silently never
+      // appear in the map picker at all despite having data.
+      const names: Record<number, string> = {};
+      (idx.world_maps || []).forEach((w) => { if (w.name) names[w.center_scene_id] = w.name; });
+      setWorldMapNames(names);
       setMarkersByScene(byScene);
       setSceneId((prev) => (prev != null && byScene.has(prev) ? prev : (byScene.has(101) ? 101 : [...byScene.keys()].sort((a, b) => a - b)[0] ?? null)));
     } catch (e: any) {
@@ -577,10 +585,11 @@ export default function MapScreen() {
     const out: PickableMap[] = [];
     for (const id of markersByScene.keys()) {
       const cfg = configs[String(id)];
-      if (cfg && cfg.name) out.push({ sceneId: id, name: cfg.name, picRes: cfg.pic_res });
+      const name = cfg?.name || worldMapNames[id];
+      if (cfg && name) out.push({ sceneId: id, name, picRes: cfg.pic_res });
     }
     return out.sort((a, b) => a.name.localeCompare(b.name));
-  }, [markersByScene, configs]);
+  }, [markersByScene, configs, worldMapNames]);
 
   const currentCfg = sceneId != null ? configs[String(sceneId)] : null;
   const currentMarkers = sceneId != null ? (markersByScene.get(sceneId) || []) : [];
@@ -710,7 +719,7 @@ export default function MapScreen() {
       <View style={styles.pickBtnRow}>
         <TouchableOpacity style={[styles.mapPickBtn, styles.pickBtnHalf]} onPress={() => setPickerOpen(true)}>
           <Text style={styles.mapPickText} numberOfLines={1}>
-            {currentCfg?.name || (th ? "เลือกแมพ" : "Choose map")}
+            {currentCfg?.name || (sceneId != null ? worldMapNames[sceneId] : null) || (th ? "เลือกแมพ" : "Choose map")}
           </Text>
           <Text style={styles.mapPickIcon}>▾</Text>
         </TouchableOpacity>
