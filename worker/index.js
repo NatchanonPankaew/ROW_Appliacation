@@ -40,11 +40,18 @@ const GOOGLE_CLIENT_ID = "216272524109-64polq30f6gqg2oi5cdm7ke2e19v653o.apps.goo
 // id we key synced data on) or null if it doesn't check out.
 async function verifyGoogleIdToken(idToken) {
   if (!idToken) return null;
-  const res = await fetch("https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(idToken));
-  if (!res.ok) return null;
-  const payload = await res.json();
-  if (payload.aud !== GOOGLE_CLIENT_ID) return null;
-  return payload;
+  try {
+    const res = await fetch("https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(idToken));
+    if (!res.ok) return null;
+    const payload = await res.json();
+    if (payload.aud !== GOOGLE_CLIENT_ID) return null;
+    return payload;
+  } catch {
+    // A network blip reaching Google shouldn't surface as a bare 500 —
+    // treat it the same as a bad/expired token (401), which the client
+    // already handles as "not signed in" rather than a hard crash.
+    return null;
+  }
 }
 
 // Signed-in players' Maps preferences (collected points, icon size, which
@@ -62,7 +69,17 @@ async function handleMapsSync(request, env) {
   const uid = payload.sub;
 
   if (request.method === "GET") {
-    const stored = await env.MAPS_SYNC.get(uid);
+    // A KV read failure (e.g. daily put()/get() quota on the free tier — the
+    // same limit that once took down /api/views, see the try/catch there)
+    // used to throw uncaught here, returning a raw 500 instead of JSON. The
+    // client's pullMapsSync() already treats a non-ok response as "nothing
+    // synced yet" (res.ok check, falls back to {}), so degrading to that same
+    // empty record on a KV error is safe — it just means this pull is a
+    // no-op merge instead of the app crashing.
+    let stored = null;
+    try {
+      stored = await env.MAPS_SYNC.get(uid);
+    } catch {}
     return new Response(stored || JSON.stringify({ collected: {}, iconScale: null, visible: null, hideCollected: null, updatedAt: 0 }), { headers: CORS });
   }
   if (request.method === "POST") {
@@ -75,7 +92,16 @@ async function handleMapsSync(request, env) {
       hideCollected: typeof body.hideCollected === "boolean" ? body.hideCollected : null,
       updatedAt: Date.now(),
     };
-    await env.MAPS_SYNC.put(uid, JSON.stringify(record));
+    try {
+      await env.MAPS_SYNC.put(uid, JSON.stringify(record));
+    } catch {
+      // Progress is always safe in the player's own localStorage regardless
+      // (see MapScreen's toggleCollected) — this only means it didn't also
+      // reach the cloud copy this round. 503 (not a bare throw) so the
+      // client's res.ok check correctly shows the sync-error indicator
+      // instead of either crashing or silently claiming success.
+      return new Response(JSON.stringify({ error: "storage unavailable" }), { status: 503, headers: CORS });
+    }
     return new Response(JSON.stringify({ ok: true }), { headers: CORS });
   }
   return new Response("Method not allowed", { status: 405, headers: CORS });
