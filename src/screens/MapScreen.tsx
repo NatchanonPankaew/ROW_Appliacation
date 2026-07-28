@@ -10,6 +10,7 @@ import {
 } from "../api/mapData";
 import { loadJSON, saveJSON } from "../api/storage";
 import { MYSTERY_SUBTYPE_INFO } from "../api/communityMysteryChests";
+import { MysteryChestGlyph } from "../components/MysteryChestGlyph";
 import {
   isGoogleSyncConfigured, renderGoogleSignIn, signOutGoogle, pullMapsSync, pushMapsSync, GoogleProfile,
 } from "../api/googleSync";
@@ -92,7 +93,6 @@ const DEFAULT_ZOOM = 2;
 // instead of a fixed value.
 const BASE_MARKER_SIZE = 40;
 const BASE_ICON_SIZE = 64;
-const BASE_EMOJI_SIZE = 27;
 const BASE_BADGE_SIZE = 20;
 const ICON_SCALE_STEPS = [0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.75, 2];
 const DEFAULT_ICON_SCALE = 1;
@@ -247,9 +247,9 @@ function MarkerModal({
       <TouchableOpacity style={styles.markerModalBg} activeOpacity={1} onPress={onClose}>
         <TouchableOpacity activeOpacity={1} style={styles.markerCard}>
           <View style={styles.markerHead}>
-            {marker.emoji ? (
-              <View style={[styles.markerPortrait, styles.markerEmojiWrap]}>
-                <Text style={styles.markerEmojiLarge}>{marker.emoji}</Text>
+            {marker.layer === "mystery_chest" ? (
+              <View style={[styles.markerPortrait, styles.markerEmojiWrap, { borderWidth: 3, borderColor: marker.mysterySubtype ? MYSTERY_SUBTYPE_INFO[marker.mysterySubtype].color : "#8A97AD" }]}>
+                <MysteryChestGlyph subtype={marker.mysterySubtype} size={36} />
               </View>
             ) : marker.portrait ? (
               <Image source={{ uri: monsterPortraitUrl(marker.portrait) }} style={styles.markerPortrait} resizeMode="contain" />
@@ -347,7 +347,6 @@ export default function MapScreen() {
       size,
       wrap: { width: size, height: size, borderRadius: 999 },
       icon: { width: BASE_ICON_SIZE * iconScale, height: BASE_ICON_SIZE * iconScale },
-      emojiFontSize: BASE_EMOJI_SIZE * iconScale,
       badgeSize: BASE_BADGE_SIZE * iconScale,
     };
   }, [iconScale]);
@@ -660,14 +659,14 @@ export default function MapScreen() {
           onPress={() => (QUICK_COLLECT_LAYERS.includes(m.layer) ? toggleCollected(m.key) : setSelectedMarker(m))}
         >
           <View style={[styles.markerShadowWrap, markerSizes.wrap]}>
-            {m.emoji ? (
-              // Mystery chests are the only emoji-rendered marker, floating
-              // directly over busy map art with nothing behind them — a
-              // solid ring in the matched weather-type's own color (unmatched
-              // ones get a neutral gray) makes them read at a glance instead
-              // of blending into similarly-colored terrain.
-              <View style={[styles.markerHalo, styles.mysteryHalo, markerSizes.wrap, { backgroundColor: m.mysterySubtype ? MYSTERY_SUBTYPE_INFO[m.mysterySubtype].color : "#5A6781" }]}>
-                <Text style={[styles.markerEmoji, { fontSize: markerSizes.emojiFontSize, lineHeight: markerSizes.emojiFontSize * 1.15 }]}>{m.emoji}</Text>
+            {m.layer === "mystery_chest" ? (
+              // Matches the community tracker's own marker chrome (dark
+              // circle + colored ring, https://benzlovely12.github.io/row-map/'s
+              // .marker CSS) and its per-type icon artwork, so a matched
+              // chest reads as the exact same thing there and here instead
+              // of a generic emoji blending into similarly-colored terrain.
+              <View style={[styles.markerHalo, styles.mysteryHalo, markerSizes.wrap, { borderColor: m.mysterySubtype ? MYSTERY_SUBTYPE_INFO[m.mysterySubtype].color : "#8A97AD" }]}>
+                <MysteryChestGlyph subtype={m.mysterySubtype} size={markerSizes.icon.width} />
               </View>
             ) : (
               <View style={[styles.markerHalo, markerSizes.wrap]}>
@@ -1005,8 +1004,7 @@ const styles = StyleSheet.create({
   // non-clipping wrapper since overflow:hidden would otherwise cut it off.
   markerShadowWrap: { shadowColor: "#000", shadowOpacity: 0.35, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 3 },
   markerHalo: { alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  mysteryHalo: { borderWidth: 2, borderColor: "#FFFFFF" },
-  markerEmoji: {},
+  mysteryHalo: { backgroundColor: "rgba(20,23,28,0.78)", borderWidth: 3 },
   markerDone: { opacity: 0.4 },
   markerDoneBadge: { position: "absolute", borderRadius: 999,
     backgroundColor: "#3FA35A", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#FFFFFF" },
@@ -1036,7 +1034,6 @@ const styles = StyleSheet.create({
   markerHead: { flexDirection: "row", alignItems: "center" },
   markerPortrait: { width: 48, height: 48, marginRight: 12, backgroundColor: "#EAF1FB", borderRadius: 8 },
   markerEmojiWrap: { alignItems: "center", justifyContent: "center" },
-  markerEmojiLarge: { fontSize: 28 },
   markerName: { color: "#41506B", fontSize: 16, fontWeight: "bold" },
   markerBadge: { alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, marginTop: 4, marginRight: 6 },
   markerBadgeText: { color: "#FFFFFF", fontSize: 11, fontWeight: "bold" },

@@ -85,7 +85,6 @@ export interface MapMarker {
   key: string;           // stable id for React lists
   name: string;
   icon?: string;         // /media/images/map_mark/<icon>.webp
-  emoji?: string;        // used instead of icon when there's no in-game mark icon for this layer
   portrait?: string;     // /media/images/monster/<portrait>.webp (monsters only)
   petIcon?: string;      // /media/images/pet/<petIcon>.webp — unused for now (pet capture layer pulled pending better source data), kept for when it returns
   x: number;             // world X
@@ -269,13 +268,12 @@ export async function fetchMarkersByScene(locale: string): Promise<Map<number, M
           key: layer + "_" + e.id,
           // mystery_chest never uses the game's own icon — it's visually
           // identical to monster_chest upstream (both share
-          // icon_map_mark_045). Points matched to a community sub-type show
-          // that type's own emoji (colored ring keyed off the same reference
-          // site, applied in MapScreen); unmatched points fall back to a
-          // plain "?" so the count still always matches roworlddb exactly.
+          // icon_map_mark_045). MapScreen renders it via mysterySubtype
+          // instead (that type's own icon/ring; unmatched points get a
+          // generic "?" glyph) so the count still always matches roworlddb
+          // exactly.
           name: label,
           icon: layer === "mystery_chest" ? undefined : e.markIcon || raw.meta?.typeIcon || "icon_map_mark_kpmw",
-          emoji: layer === "mystery_chest" ? (match ? MYSTERY_SUBTYPE_INFO[match.subtype].emoji : "❓") : undefined,
           mysterySubtype: match?.subtype,
           x,
           z,
@@ -302,7 +300,6 @@ export async function fetchMarkersByScene(locale: string): Promise<Map<number, M
         layer: "mystery_chest",
         key: "mystery_community_" + sceneId + "_" + i,
         name: th ? info.th : info.en,
-        emoji: info.emoji,
         mysterySubtype: c.subtype,
         x: c.x,
         z: c.z,
