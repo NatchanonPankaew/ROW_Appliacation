@@ -355,6 +355,15 @@ export default function MapScreen() {
       // different shapes by different amounts instead of evenly).
       glyph: size * 0.96,
       badgeSize: BASE_BADGE_SIZE * iconScale,
+      // Mystery chests cluster much tighter than any other layer — several
+      // weather variants often sit only a few world units apart (the same
+      // physical spot, one entry per condition) — so at the shared marker
+      // size adjacent ones overlap into an unreadable stack. Shrunk just for
+      // this layer rather than changing MARKER_SIZE globally.
+      mysterySize: size * 0.65,
+      mysteryWrap: { width: size * 0.65, height: size * 0.65, borderRadius: 999 },
+      mysteryGlyph: size * 0.65 * 0.96,
+      mysteryBadgeSize: BASE_BADGE_SIZE * iconScale * 0.65,
     };
   }, [iconScale]);
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
@@ -654,29 +663,33 @@ export default function MapScreen() {
       const { left, top } = worldToImageFraction(currentCfg, m.x, m.z);
       if (left < -0.02 || left > 1.02 || top < -0.02 || top > 1.02) return null;
       const done = !!collected[m.key];
+      const isMystery = m.layer === "mystery_chest";
+      const outerSize = isMystery ? markerSizes.mysterySize : markerSizes.size;
+      const wrapStyle = isMystery ? markerSizes.mysteryWrap : markerSizes.wrap;
+      const badgeSize = isMystery ? markerSizes.mysteryBadgeSize : markerSizes.badgeSize;
       return (
         <TouchableOpacity
           key={m.key}
           style={[
             styles.marker,
-            { left: `${left * 100}%`, top: `${top * 100}%`, width: markerSizes.size, height: markerSizes.size, marginLeft: -markerSizes.size / 2, marginTop: -markerSizes.size / 2 },
+            { left: `${left * 100}%`, top: `${top * 100}%`, width: outerSize, height: outerSize, marginLeft: -outerSize / 2, marginTop: -outerSize / 2 },
             done && styles.markerDone,
           ]}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           onPress={() => (QUICK_COLLECT_LAYERS.includes(m.layer) ? toggleCollected(m.key) : setSelectedMarker(m))}
         >
-          <View style={[styles.markerShadowWrap, markerSizes.wrap]}>
-            {m.layer === "mystery_chest" ? (
+          <View style={[styles.markerShadowWrap, wrapStyle]}>
+            {isMystery ? (
               // Matches the community tracker's own marker chrome (dark
               // circle + colored ring, https://benzlovely12.github.io/row-map/'s
               // .marker CSS) and its per-type icon artwork, so a matched
               // chest reads as the exact same thing there and here instead
               // of a generic emoji blending into similarly-colored terrain.
-              <View style={[styles.markerHalo, styles.mysteryHalo, markerSizes.wrap, { borderColor: m.mysterySubtype ? MYSTERY_SUBTYPE_INFO[m.mysterySubtype].color : "#8A97AD" }]}>
-                <MysteryChestGlyph subtype={m.mysterySubtype} size={markerSizes.glyph} />
+              <View style={[styles.markerHalo, styles.mysteryHalo, wrapStyle, { borderColor: m.mysterySubtype ? MYSTERY_SUBTYPE_INFO[m.mysterySubtype].color : "#8A97AD" }]}>
+                <MysteryChestGlyph subtype={m.mysterySubtype} size={markerSizes.mysteryGlyph} />
               </View>
             ) : (
-              <View style={[styles.markerHalo, markerSizes.wrap]}>
+              <View style={[styles.markerHalo, wrapStyle]}>
                 {m.petIcon ? (
                   <Image source={{ uri: petPortraitUrl(m.petIcon) }} style={markerSizes.icon} resizeMode="contain" />
                 ) : (
@@ -686,8 +699,8 @@ export default function MapScreen() {
             )}
           </View>
           {done && (
-            <View style={[styles.markerDoneBadge, { width: markerSizes.badgeSize, height: markerSizes.badgeSize, top: -markerSizes.badgeSize / 5, right: -markerSizes.badgeSize / 5 }]}>
-              <Text style={[styles.markerDoneBadgeText, { fontSize: markerSizes.badgeSize * 0.55 }]}>✓</Text>
+            <View style={[styles.markerDoneBadge, { width: badgeSize, height: badgeSize, top: -badgeSize / 5, right: -badgeSize / 5 }]}>
+              <Text style={[styles.markerDoneBadgeText, { fontSize: badgeSize * 0.55 }]}>✓</Text>
             </View>
           )}
         </TouchableOpacity>
