@@ -284,17 +284,21 @@ export async function fetchMarkersByScene(locale: string): Promise<Map<number, M
     }
   });
 
-  // Community-only fallback: a scene roworlddb's own mystery_chest.json has
-  // zero entries for (confirmed via testing: Geffen River/10141) would
-  // otherwise show nothing at all even with tracker points available for
-  // it, since the enrichment above only ever attaches to an existing
-  // authoritative marker. Only kicks in when a scene has NO authoritative
-  // mystery_chest coverage, so it can't inflate a count that already
-  // matches roworlddb exactly elsewhere.
+  // Any community point that didn't enrich an existing authoritative marker
+  // above becomes its own standalone marker — this isn't just a rare
+  // fallback for scenes with zero authoritative coverage. roworlddb's own
+  // mystery_chest.json turns out to correspond almost exactly 1:1 with just
+  // the tracker's "high" (สูง, hard-to-reach-spot) sub-type: e.g. Prontera
+  // has 16 authoritative points and exactly 16 "high" tracker points, each
+  // within <5 world units of one of them, while every *other* sub-type sits
+  // 12-25 units away from all of them — nowhere close. The other 5 (weather-
+  // conditional: butterfly/sun/rain/snowman/winter) are a mechanic roworlddb
+  // doesn't expose authoritative positions for at all, so without this they
+  // were being silently dropped in every scene that already had some "high"
+  // coverage (which is most of them) instead of shown as their own points.
   for (const [sceneId, cands] of communityByScene) {
-    const hasAuthoritative = (byScene.get(sceneId) || []).some((m) => m.layer === "mystery_chest");
-    if (hasAuthoritative) continue;
     cands.forEach((c, i) => {
+      if (c.used) return;
       const info = MYSTERY_SUBTYPE_INFO[c.subtype];
       push(sceneId, {
         layer: "mystery_chest",
