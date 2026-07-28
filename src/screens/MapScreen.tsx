@@ -347,6 +347,12 @@ export default function MapScreen() {
       size,
       wrap: { width: size, height: size, borderRadius: 999 },
       icon: { width: BASE_ICON_SIZE * iconScale, height: BASE_ICON_SIZE * iconScale },
+      // Unlike the game's own mark icons (see markerHalo below), these hand-drawn
+      // glyphs have no baked-in transparent padding to crop away by oversizing —
+      // sized straight to the halo's own circle (same ratio as the tracker's own
+      // 38px-icon-in-50px-ring chrome) so the background sits snug against them
+      // instead of the icon overflowing/clipping unevenly per shape.
+      glyph: size * 0.76,
       badgeSize: BASE_BADGE_SIZE * iconScale,
     };
   }, [iconScale]);
@@ -666,7 +672,7 @@ export default function MapScreen() {
               // chest reads as the exact same thing there and here instead
               // of a generic emoji blending into similarly-colored terrain.
               <View style={[styles.markerHalo, styles.mysteryHalo, markerSizes.wrap, { borderColor: m.mysterySubtype ? MYSTERY_SUBTYPE_INFO[m.mysterySubtype].color : "#8A97AD" }]}>
-                <MysteryChestGlyph subtype={m.mysterySubtype} size={markerSizes.icon.width} />
+                <MysteryChestGlyph subtype={m.mysterySubtype} size={markerSizes.glyph} />
               </View>
             ) : (
               <View style={[styles.markerHalo, markerSizes.wrap]}>
