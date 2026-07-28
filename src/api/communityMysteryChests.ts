@@ -19,21 +19,41 @@
 //    pairing stood out as an order-of-magnitude better fit than any other
 //    ordering in all 3 cases (e.g. Izlude: 3.9 vs. next-best 47.8), which is
 //    what makes accepting an unlabeled point-cloud match trustworthy here.
-// Regions without >=2 (for cards) or >=3 (for landmarks, so a wrong ordering
-// has a real chance to show up as a bad fit) reliable anchors are
-// intentionally left out rather than guessed: Goblin Forest, Glast Heim
-// (outer has 0 card/boss/landmark overlap; its "inside castle"/"dungeon"
-// interior floors on the tracker have no roworlddb map at all), Sakura City
-// (only 2 landmark points — too few to validate a permutation), Novice
-// Village, Prontera sewer/labyrinth floors, Morroc Ant Hell/Pyramid/Sphinx
-// floors, Payon Munak Cave floors, Mt. Mjolnir mine floors, Byalan Island's
-// 2 undersea-tunnel floors. mvp/elite/mini spawn points ("boss" markers on
-// the tracker) were also tried as a 3rd anchor type, but every species in
-// every region had multiple spawn spots on both sides with no way to tell
-// which spot is which by name alone, so none of those were usable.
+//  - for Glast Heim, Goblin Forest, Sakura City and Novice Village — which
+//    have no card, boss or landmark overlap at all — the *generic* chest
+//    positions themselves (roworlddb's expl_chest/guard_chest vs. the
+//    tracker's box/treasure/guard markers, which are the same underlying
+//    spawn points just categorized slightly differently) were used as an
+//    unlabeled point cloud, aligned with a translation+scale ICP (iterative
+//    closest point): start from a bounding-box-matched guess, alternate
+//    nearest-neighbor assignment with a least-squares refit until it
+//    converges. Trustworthy here because (a) the point counts matched
+//    exactly or near-exactly on both sides (e.g. Goblin Forest: 27 vs. 27),
+//    and (b) the converged fit was 10-40x better than the same procedure run
+//    with the Z axis pre-flipped (a wrong alignment has no reason to also
+//    land on the sign convention every other region independently confirmed).
+// Two floors remain out of reach for a structural reason rather than a data
+// one: the tracker's "glastheim2"/"glastheim3" (ในปราสาท/คุกใต้ดิน) each
+// appear to compress several of roworlddb's separate interior scenes
+// (10801-10808: floors, Order of the Knights floors, the abbey, the
+// catacombs, the prison, the sewer) into a single drawn image, so there's no
+// single roworlddb scene a tracker point on those 2 images actually
+// corresponds to.
+// mvp/elite/mini spawn points ("boss" markers on the tracker) were also
+// tried as an anchor type, but every species in every region had multiple
+// spawn spots on both sides with no way to tell which spot is which by name
+// alone, so none of those were usable anywhere.
 // Last checked against the tracker 2026-07-28: card/landmark-derived scenes
-// (101/102/103/107/10141/10242/10712) came back byte-identical (no drift);
-// Alberta (106), Izlude (104) and Byalan Island outer (10401) are new.
+// (101/102/103/107/10141/10242/10712) came back byte-identical (no drift).
+// New: Alberta (106), Izlude (104), Byalan Island outer (10401), Glast Heim
+// outer (108), Goblin Forest (10511), Sakura City (60012), Novice Village
+// (99, the tracker's own resident chest there is a hair — 20.2 vs. our
+// 20-unit match radius — outside range, so it'll keep showing as "?" until
+// the tracker logs a closer point or the radius gets revisited). Sakura's
+// 2 roworlddb chests are likewise still unmatched even after this pass —
+// the tracker has fewer confirmed weather-chest finds than roworlddb has
+// chest spots there, not a fit error (confirmed via the same ICP residual
+// check as the other 3, well under 10 units for every actually-shared spot).
 export interface CommunityChestPoint {
   sceneId: number;
   subtype: "high" | "butterfly" | "sun" | "rain" | "snowman" | "winter";
@@ -46,7 +66,11 @@ export const COMMUNITY_MYSTERY_CHESTS: CommunityChestPoint[] = [
 {"sceneId":10141,"subtype":"rain","x":396.35,"z":178.48},{"sceneId":10141,"subtype":"snowman","x":414.44,"z":196.25},{"sceneId":10141,"subtype":"rain","x":457.08,"z":244.9},{"sceneId":10141,"subtype":"butterfly","x":502.08,"z":264.97},{"sceneId":10141,"subtype":"snowman","x":497.51,"z":307.45},{"sceneId":10141,"subtype":"rain","x":447.95,"z":445.16},{"sceneId":10141,"subtype":"snowman","x":460.86,"z":459.32},{"sceneId":10141,"subtype":"snowman","x":500.19,"z":523.93},{"sceneId":10141,"subtype":"butterfly","x":499.72,"z":550.96},
 {"sceneId":106,"subtype":"high","x":102.26,"z":228.39},{"sceneId":106,"subtype":"sun","x":98.31,"z":165.94},{"sceneId":106,"subtype":"high","x":137.27,"z":165.49},{"sceneId":106,"subtype":"high","x":173.74,"z":201.97},{"sceneId":106,"subtype":"rain","x":163.92,"z":186.05},{"sceneId":106,"subtype":"rain","x":130.82,"z":139.36},{"sceneId":106,"subtype":"butterfly","x":95.53,"z":122.55},{"sceneId":106,"subtype":"high","x":83.81,"z":130.51},{"sceneId":106,"subtype":"high","x":76.78,"z":86.37},{"sceneId":106,"subtype":"high","x":162.02,"z":98.08},{"sceneId":106,"subtype":"high","x":170.37,"z":92.53},{"sceneId":106,"subtype":"high","x":213.14,"z":93.73},{"sceneId":106,"subtype":"butterfly","x":207.42,"z":102.43},
 {"sceneId":10401,"subtype":"butterfly","x":119.19,"z":81.34},
-{"sceneId":104,"subtype":"rain","x":69.81,"z":162.52},{"sceneId":104,"subtype":"butterfly","x":89.78,"z":166.98},{"sceneId":104,"subtype":"high","x":99.49,"z":177.03},{"sceneId":104,"subtype":"high","x":37.89,"z":113.6},{"sceneId":104,"subtype":"butterfly","x":76.53,"z":108.58},{"sceneId":104,"subtype":"rain","x":77.09,"z":93.7},{"sceneId":104,"subtype":"sun","x":99.49,"z":94.26},{"sceneId":104,"subtype":"high","x":172.09,"z":102.82},{"sceneId":104,"subtype":"high","x":167.8,"z":89.61}
+{"sceneId":104,"subtype":"rain","x":69.81,"z":162.52},{"sceneId":104,"subtype":"butterfly","x":89.78,"z":166.98},{"sceneId":104,"subtype":"high","x":99.49,"z":177.03},{"sceneId":104,"subtype":"high","x":37.89,"z":113.6},{"sceneId":104,"subtype":"butterfly","x":76.53,"z":108.58},{"sceneId":104,"subtype":"rain","x":77.09,"z":93.7},{"sceneId":104,"subtype":"sun","x":99.49,"z":94.26},{"sceneId":104,"subtype":"high","x":172.09,"z":102.82},{"sceneId":104,"subtype":"high","x":167.8,"z":89.61},
+{"sceneId":108,"subtype":"high","x":194.1,"z":271.1},{"sceneId":108,"subtype":"winter","x":157.91,"z":245.72},{"sceneId":108,"subtype":"high","x":157.91,"z":230.55},{"sceneId":108,"subtype":"butterfly","x":194.69,"z":204.01},{"sceneId":108,"subtype":"rain","x":142.15,"z":181.26},{"sceneId":108,"subtype":"high","x":262.41,"z":170.76},{"sceneId":108,"subtype":"high","x":68.88,"z":222.68},{"sceneId":108,"subtype":"sun","x":113.83,"z":222.68},{"sceneId":108,"subtype":"high","x":43.49,"z":85.88},{"sceneId":108,"subtype":"butterfly","x":76.47,"z":107.46},{"sceneId":108,"subtype":"high","x":124.63,"z":126.13},{"sceneId":108,"subtype":"rain","x":157.33,"z":103.09},{"sceneId":108,"subtype":"rain","x":225.04,"z":75.67},{"sceneId":108,"subtype":"sun","x":232.05,"z":99.88},{"sceneId":108,"subtype":"high","x":251.02,"z":99.59},{"sceneId":108,"subtype":"rain","x":236.14,"z":123.21},
+{"sceneId":10511,"subtype":"high","x":44.02,"z":467.21},{"sceneId":10511,"subtype":"rain","x":108.48,"z":427.41},{"sceneId":10511,"subtype":"rain","x":43.72,"z":395.63},{"sceneId":10511,"subtype":"butterfly","x":50.04,"z":407.81},{"sceneId":10511,"subtype":"butterfly","x":57.57,"z":333.86},{"sceneId":10511,"subtype":"sun","x":77.45,"z":350.79},{"sceneId":10511,"subtype":"sun","x":120.83,"z":330.59},{"sceneId":10511,"subtype":"butterfly","x":125.35,"z":205.86},{"sceneId":10511,"subtype":"rain","x":114.5,"z":162.49},{"sceneId":10511,"subtype":"butterfly","x":57.57,"z":113.49},{"sceneId":10511,"subtype":"sun","x":209.08,"z":72.8},{"sceneId":10511,"subtype":"rain","x":174.74,"z":49.04},
+{"sceneId":60012,"subtype":"sun","x":123.34,"z":97.13},{"sceneId":60012,"subtype":"butterfly","x":149.31,"z":160.6},{"sceneId":60012,"subtype":"sun","x":105.88,"z":160.6},{"sceneId":60012,"subtype":"butterfly","x":169.33,"z":97.57},{"sceneId":60012,"subtype":"rain","x":121.21,"z":160.16},{"sceneId":60012,"subtype":"rain","x":144.2,"z":62.31},{"sceneId":60012,"subtype":"snowman","x":166.77,"z":79.94},{"sceneId":60012,"subtype":"snowman","x":175.29,"z":158.84},
+{"sceneId":99,"subtype":"butterfly","x":514.1,"z":485.24},{"sceneId":99,"subtype":"butterfly","x":510.52,"z":429.49}
 ];
 
 // Colors match the reference tracker's own per-type icon color (benzlovely12
