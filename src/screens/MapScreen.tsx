@@ -347,12 +347,13 @@ export default function MapScreen() {
       size,
       wrap: { width: size, height: size, borderRadius: 999 },
       icon: { width: BASE_ICON_SIZE * iconScale, height: BASE_ICON_SIZE * iconScale },
-      // Unlike the game's own mark icons (see markerHalo below), these hand-drawn
-      // glyphs have no baked-in transparent padding to crop away by oversizing —
-      // sized straight to the halo's own circle (same ratio as the tracker's own
-      // 38px-icon-in-50px-ring chrome) so the background sits snug against them
-      // instead of the icon overflowing/clipping unevenly per shape.
-      glyph: size * 0.76,
+      // Sized to fill the halo the same way the game's own mark icons end up
+      // filling theirs (see markerHalo below) so a mystery-chest marker reads
+      // as the same visual size/boldness as every other chest on the map —
+      // just without their oversize-then-crop trick (these hand-drawn glyphs
+      // have no baked-in padding to crop away, so oversizing would clip
+      // different shapes by different amounts instead of evenly).
+      glyph: size * 0.96,
       badgeSize: BASE_BADGE_SIZE * iconScale,
     };
   }, [iconScale]);
