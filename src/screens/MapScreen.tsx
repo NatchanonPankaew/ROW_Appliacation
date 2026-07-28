@@ -660,15 +660,24 @@ export default function MapScreen() {
           onPress={() => (QUICK_COLLECT_LAYERS.includes(m.layer) ? toggleCollected(m.key) : setSelectedMarker(m))}
         >
           <View style={[styles.markerShadowWrap, markerSizes.wrap]}>
-            <View style={[styles.markerHalo, markerSizes.wrap]}>
-              {m.emoji ? (
+            {m.emoji ? (
+              // Mystery chests are the only emoji-rendered marker, floating
+              // directly over busy map art with nothing behind them — a
+              // solid ring in the matched weather-type's own color (unmatched
+              // ones get a neutral gray) makes them read at a glance instead
+              // of blending into similarly-colored terrain.
+              <View style={[styles.markerHalo, styles.mysteryHalo, markerSizes.wrap, { backgroundColor: m.mysterySubtype ? MYSTERY_SUBTYPE_INFO[m.mysterySubtype].color : "#5A6781" }]}>
                 <Text style={[styles.markerEmoji, { fontSize: markerSizes.emojiFontSize, lineHeight: markerSizes.emojiFontSize * 1.15 }]}>{m.emoji}</Text>
-              ) : m.petIcon ? (
-                <Image source={{ uri: petPortraitUrl(m.petIcon) }} style={markerSizes.icon} resizeMode="contain" />
-              ) : (
-                <Image source={{ uri: mapMarkIconUrl(m.icon!) }} style={markerSizes.icon} resizeMode="contain" />
-              )}
-            </View>
+              </View>
+            ) : (
+              <View style={[styles.markerHalo, markerSizes.wrap]}>
+                {m.petIcon ? (
+                  <Image source={{ uri: petPortraitUrl(m.petIcon) }} style={markerSizes.icon} resizeMode="contain" />
+                ) : (
+                  <Image source={{ uri: mapMarkIconUrl(m.icon!) }} style={markerSizes.icon} resizeMode="contain" />
+                )}
+              </View>
+            )}
           </View>
           {done && (
             <View style={[styles.markerDoneBadge, { width: markerSizes.badgeSize, height: markerSizes.badgeSize, top: -markerSizes.badgeSize / 5, right: -markerSizes.badgeSize / 5 }]}>
@@ -996,6 +1005,7 @@ const styles = StyleSheet.create({
   // non-clipping wrapper since overflow:hidden would otherwise cut it off.
   markerShadowWrap: { shadowColor: "#000", shadowOpacity: 0.35, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 3 },
   markerHalo: { alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  mysteryHalo: { borderWidth: 2, borderColor: "#FFFFFF" },
   markerEmoji: {},
   markerDone: { opacity: 0.4 },
   markerDoneBadge: { position: "absolute", borderRadius: 999,
