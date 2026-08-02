@@ -889,37 +889,72 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
     // job-forge map AND the level-based packages (the latter is where the ~350
     // "missing" affixes live), so the browse is complete.
     const pkgStunts = (pids: number[]) => pids.flatMap((pid) => (data.packages[String(pid)] || []).map((s) => s.id));
-    const levelIds = (m: Record<string, Record<string, number[]>>, t: string) =>
-      Object.values(m[t] || {}).flatMap((pids) => pkgStunts(pids));
+
+    // Job "line" grouping: bucket by base class (Swordman covers Knight/Lord
+    // Knight/Rune Knight too) instead of one near-duplicate section per exact
+    // advancement tier, and instead of the raw weapon type.
+    const lineRoot = (job: number) => {
+      const path = skillPathTo(index, job);
+      return path.length > 1 && path[0] === 101 ? path[1] : path[0];
+    };
+    // weaponPkgByTypeLevel/armorPkgByTypeLevel carry no job dimension at all —
+    // dumping them in unfiltered (the old behavior) meant every class sharing
+    // a weapon type got an identical pile of extra affixes, which is what read
+    // as "still mixed between jobs" / effectively grouped by weapon. A stunt's
+    // own job_ids (when the library sets it) is used to keep only the ones
+    // that actually belong to a job in this line; stunts with no job_ids are
+    // genuinely unrestricted and still pass through.
+    const levelIdsForLine = (m: Record<string, Record<string, number[]>>, t: string, lineJobs: Set<number>) =>
+      Object.values(m[t] || {}).flatMap((pids) => pkgStunts(pids)).filter((id) => {
+        const st = data.stuntById[id];
+        return st && (!st.jobIds.length || st.jobIds.some((j) => lineJobs.has(j)));
+      });
 
     type Sec = { key: string; label: string; ids: number[] };
     const secs: Sec[] = [];
 
-    // one section per CLASS: the affixes it can forge on the weapon types it uses
-    // (its own job-forge stunts + the type's level-based stunts).
-    const classTypes = new Map<number, Set<string>>();
-    Object.keys(data.weaponForge).forEach((t) =>
-      Object.keys(data.weaponForge[t] || {}).forEach((j) => {
-        const job = Number(j);
-        if (!classTypes.has(job)) classTypes.set(job, new Set());
-        classTypes.get(job)!.add(t);
-      })
-    );
-    [...classTypes.keys()].sort((a, b) => a - b).forEach((job) => {
-      const ids = new Set<number>();
-      classTypes.get(job)!.forEach((t) => {
-        (data.weaponForge[t]?.[String(job)] || []).forEach((i) => ids.add(i));
-        levelIds(data.index.weaponPkgByTypeLevel, t).forEach((i) => ids.add(i));
+    // one section per job LINE: every weapon (or armor) type any job in that
+    // line uses, its own forge-able affixes, plus the type's level-package
+    // affixes that are actually tagged for a job in this line.
+    const buildLineSections = (
+      forgeMap: Record<string, Record<string, number[]>>,
+      typeLevelMap: Record<string, Record<string, number[]>>,
+      keyPrefix: string
+    ) => {
+      const lineJobs = new Map<number, Set<number>>();
+      const lineTypes = new Map<number, Set<string>>();
+      Object.keys(forgeMap).forEach((t) =>
+        Object.keys(forgeMap[t] || {}).forEach((jStr) => {
+          const job = Number(jStr);
+          const root = lineRoot(job);
+          if (!lineJobs.has(root)) { lineJobs.set(root, new Set()); lineTypes.set(root, new Set()); }
+          lineJobs.get(root)!.add(job);
+          lineTypes.get(root)!.add(t);
+        })
+      );
+      [...lineJobs.keys()].sort((a, b) => a - b).forEach((root) => {
+        const jobs = lineJobs.get(root)!;
+        const ids = new Set<number>();
+        lineTypes.get(root)!.forEach((t) => {
+          jobs.forEach((j) => (forgeMap[t]?.[String(j)] || []).forEach((i) => ids.add(i)));
+          levelIdsForLine(typeLevelMap, t, jobs).forEach((i) => ids.add(i));
+        });
+        if (ids.size) secs.push({ key: keyPrefix + root, label: stripColorTags(index[root]?.name) || ("Job " + root), ids: [...ids] });
       });
-      if (ids.size) secs.push({ key: "cls_" + job, label: stripColorTags(index[job]?.name) || ("Job " + job), ids: [...ids] });
-    });
+    };
+    buildLineSections(data.weaponForge, data.index.weaponPkgByTypeLevel, "cls_");
+    // Accessory affixes genuinely differ per job (unlike Armor/Cape, which are
+    // identical for all 31 jobs) — line-group them the same way as weapons
+    // instead of merging every class into one "all jobs" bucket.
+    buildLineSections({ "10": data.armorForge["10"] || {} }, { "10": data.index.armorPkgByTypeLevel["10"] || {} }, "acc_");
 
-    // universal gear sections (armor / cape / accessory apply to every class)
-    const gear: [string, string, string][] = [["4", "เกราะ (ทุกอาชีพ)", "Armor (all jobs)"], ["7", "ผ้าคลุม (ทุกอาชีพ)", "Cape (all jobs)"], ["10", "เครื่องประดับ (ทุกอาชีพ)", "Accessory (all jobs)"]];
+    // Armor / Cape: confirmed identical across every job, so one universal
+    // section each is correct (no per-class distinction to preserve).
+    const gear: [string, string, string][] = [["4", "เกราะ (ทุกอาชีพ)", "Armor (all jobs)"], ["7", "ผ้าคลุม (ทุกอาชีพ)", "Cape (all jobs)"]];
     gear.forEach(([s, tl, el]) => {
       const ids = new Set<number>();
       Object.values(data.armorForge[s] || {}).forEach((arr) => arr.forEach((i) => ids.add(i)));
-      levelIds(data.index.armorPkgByTypeLevel, s).forEach((i) => ids.add(i));
+      Object.values(data.index.armorPkgByTypeLevel[s] || {}).flatMap((pids) => pkgStunts(pids)).forEach((i) => ids.add(i));
       if (ids.size) secs.push({ key: "gear_" + s, label: th ? tl : el, ids: [...ids] });
     });
 
@@ -949,7 +984,7 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
           stats: g.stats,
           slotKey: sec.key,
           slot: sec.label,
-          tags: { quality: qualityTag(g.quality), slot: sec.label },
+          tags: { quality: qualityTag(g.quality), slot: sec.label, level: String(lvls[0]) },
         } as NormItem);
       }
     }
