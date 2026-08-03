@@ -899,26 +899,35 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
     // under Mage), which is exactly the "same affix in unrelated classes" bug.
     // Two classes in the same advancement line (Swordman/Knight) legitimately
     // share their whole forge list — that's real game data, not a bug.
-    const buildJobSections = (forgeMap: Record<string, Record<string, number[]>>, keyPrefix: string) => {
-      const jobTypes = new Map<number, Set<string>>();
+    // Weapon AND accessory affixes for a job share ONE section/chip (a
+    // separate "cls_"/"acc_" pair per job produced two identically-labeled
+    // chips in the filter row) — tag each source's types so a weapon type id
+    // ("10" doesn't happen to collide, but be explicit anyway) never merges
+    // with an armor type id of the same string.
+    const jobTypes = new Map<number, Set<string>>();
+    const addForgeMap = (forgeMap: Record<string, Record<string, number[]>>, tagPrefix: string) => {
       Object.keys(forgeMap).forEach((t) =>
         Object.keys(forgeMap[t] || {}).forEach((jStr) => {
           const job = Number(jStr);
           if (!jobTypes.has(job)) jobTypes.set(job, new Set());
-          jobTypes.get(job)!.add(t);
+          jobTypes.get(job)!.add(tagPrefix + t);
         })
       );
-      [...jobTypes.keys()].sort((a, b) => a - b).forEach((job) => {
-        const ids = new Set<number>();
-        jobTypes.get(job)!.forEach((t) => (forgeMap[t]?.[String(job)] || []).forEach((i) => ids.add(i)));
-        if (ids.size) secs.push({ key: keyPrefix + job, label: stripColorTags(index[job]?.name) || ("Job " + job), ids: [...ids] });
-      });
     };
-    buildJobSections(data.weaponForge, "cls_");
+    addForgeMap(data.weaponForge, "w:");
     // Accessory affixes genuinely differ per job (unlike Armor/Cape, which are
-    // identical for all 31 jobs) — per-class-section them the same way as
-    // weapons instead of merging every class into one "all jobs" bucket.
-    buildJobSections({ "10": data.armorForge["10"] || {} }, "acc_");
+    // identical for all 31 jobs) — fold them into the same per-class section
+    // instead of merging every class into one "all jobs" bucket.
+    addForgeMap({ "10": data.armorForge["10"] || {} }, "a:");
+    [...jobTypes.keys()].sort((a, b) => a - b).forEach((job) => {
+      const ids = new Set<number>();
+      jobTypes.get(job)!.forEach((tagged) => {
+        const t = tagged.slice(2);
+        const forgeMap = tagged.startsWith("w:") ? data.weaponForge : data.armorForge;
+        (forgeMap[t]?.[String(job)] || []).forEach((i) => ids.add(i));
+      });
+      if (ids.size) secs.push({ key: "cls_" + job, label: stripColorTags(index[job]?.name) || ("Job " + job), ids: [...ids] });
+    });
 
     // Armor / Cape: confirmed identical across every job, so one universal
     // section each is correct (no per-class distinction to preserve).
