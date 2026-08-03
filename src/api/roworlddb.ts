@@ -885,35 +885,21 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
     const index = await fetchSkillIndex(locale).catch(() => ({} as Record<number, JobNode>));
     const th = locale === "th-TH";
 
-    // every stunt id available on a weapon type / armor slot — combining BOTH the
-    // job-forge map AND the level-based packages (the latter is where the ~350
-    // "missing" affixes live), so the browse is complete.
     const pkgStunts = (pids: number[]) => pids.flatMap((pid) => (data.packages[String(pid)] || []).map((s) => s.id));
-
-    // weaponPkgByTypeLevel/armorPkgByTypeLevel carry no job dimension at all —
-    // dumping them in unfiltered (the old behavior) meant every class sharing
-    // a weapon type got an identical pile of extra affixes, which is what read
-    // as "still mixed between jobs". A stunt's own job_ids (when the library
-    // sets it) is used to keep only the ones that actually belong to THIS
-    // job; stunts with no job_ids are genuinely unrestricted and still pass.
-    const levelIdsForJob = (m: Record<string, Record<string, number[]>>, t: string, job: number) =>
-      Object.values(m[t] || {}).flatMap((pids) => pkgStunts(pids)).filter((id) => {
-        const st = data.stuntById[id];
-        return st && (!st.jobIds.length || st.jobIds.includes(job));
-      });
 
     type Sec = { key: string; label: string; ids: number[] };
     const secs: Sec[] = [];
 
     // one section per exact class (Lord Knight stays separate from Knight and
-    // Paladin, not merged into a "Swordman" blob): every weapon (or armor)
-    // type that job uses, its own forge-able affixes, plus the type's level-
-    // package affixes that are actually tagged for this specific job.
-    const buildJobSections = (
-      forgeMap: Record<string, Record<string, number[]>>,
-      typeLevelMap: Record<string, Record<string, number[]>>,
-      keyPrefix: string
-    ) => {
+    // Paladin, not merged into a "Swordman" blob), using ONLY the job-forge
+    // map. The type-level packages were tried as a fill-in for the ~350
+    // affixes the forge map alone omits, but they carry no job dimension —
+    // most have no job_ids either, so they got added to every class sharing
+    // that weapon type regardless of relation (a Merchant affix could show up
+    // under Mage), which is exactly the "same affix in unrelated classes" bug.
+    // Two classes in the same advancement line (Swordman/Knight) legitimately
+    // share their whole forge list — that's real game data, not a bug.
+    const buildJobSections = (forgeMap: Record<string, Record<string, number[]>>, keyPrefix: string) => {
       const jobTypes = new Map<number, Set<string>>();
       Object.keys(forgeMap).forEach((t) =>
         Object.keys(forgeMap[t] || {}).forEach((jStr) => {
@@ -924,18 +910,15 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
       );
       [...jobTypes.keys()].sort((a, b) => a - b).forEach((job) => {
         const ids = new Set<number>();
-        jobTypes.get(job)!.forEach((t) => {
-          (forgeMap[t]?.[String(job)] || []).forEach((i) => ids.add(i));
-          levelIdsForJob(typeLevelMap, t, job).forEach((i) => ids.add(i));
-        });
+        jobTypes.get(job)!.forEach((t) => (forgeMap[t]?.[String(job)] || []).forEach((i) => ids.add(i)));
         if (ids.size) secs.push({ key: keyPrefix + job, label: stripColorTags(index[job]?.name) || ("Job " + job), ids: [...ids] });
       });
     };
-    buildJobSections(data.weaponForge, data.index.weaponPkgByTypeLevel, "cls_");
+    buildJobSections(data.weaponForge, "cls_");
     // Accessory affixes genuinely differ per job (unlike Armor/Cape, which are
     // identical for all 31 jobs) — per-class-section them the same way as
     // weapons instead of merging every class into one "all jobs" bucket.
-    buildJobSections({ "10": data.armorForge["10"] || {} }, { "10": data.index.armorPkgByTypeLevel["10"] || {} }, "acc_");
+    buildJobSections({ "10": data.armorForge["10"] || {} }, "acc_");
 
     // Armor / Cape: confirmed identical across every job, so one universal
     // section each is correct (no per-class distinction to preserve).
