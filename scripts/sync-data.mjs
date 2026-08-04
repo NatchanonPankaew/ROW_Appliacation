@@ -17,6 +17,7 @@ import { mergeTwAffixes } from "./merge-tw-affixes.mjs";
 import { applyTwAffixTh } from "./apply-tw-affix-th.mjs";
 import { mergeTwEquipment } from "./merge-tw-equipment.mjs";
 import { applyTwEquipTh } from "./apply-tw-equip-th.mjs";
+import { mergeTwCards } from "./merge-tw-cards.mjs";
 
 const ORIGIN = "https://roworlddb.com";
 const BASE = ORIGIN + "/sea";
@@ -159,6 +160,10 @@ async function main() {
   // then translate the Taiwan-only item names to Thai.
   await mergeTwEquipment();
   await applyTwEquipTh();
+  // Pull the Glast Heim patch cards Taiwan already has (translated by hand,
+  // see merge-tw-cards.mjs) — only the ones with a verified translation get
+  // added, so this stays a no-op for anything TW adds beyond that list.
+  await mergeTwCards();
 
   console.log("\nDone. " + okCount + " ok, " + failCount + " failed.");
 }
