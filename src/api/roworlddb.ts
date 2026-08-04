@@ -666,21 +666,23 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
     items = (d.monsters || []).map((m: any) => {
       const drops = (m.drops || []).map((x: any) => x.name).filter(Boolean);
       const details = statRows(m.stats);
-      if (m.race_name) details.unshift({ label: "Race", value: m.race_name });
-      if (m.element_name) details.unshift({ label: "Element", value: m.element_name });
+      const raceName = m.race?.name || m.race_name || "";
+      const elementName = m.element?.name || m.element_name || "";
+      if (raceName) details.unshift({ label: "Race", value: raceName });
+      if (elementName) details.unshift({ label: "Element", value: elementName });
       details.unshift({ label: "Level", value: String(m.level) });
       const size = m.body?.name || m.size_name || "";
       return {
         id: m.id, title: m.name,
-        subtitle: ["Lv." + m.level, m.race_name, m.element_name].filter(Boolean).join("  -  "),
+        subtitle: ["Lv." + m.level, raceName, elementName].filter(Boolean).join("  -  "),
         // browse filter dimensions for monsters: element (slot) + size (subtype)
-        slotKey: m.element_name || "อื่นๆ",
-        slot: m.element_name || undefined,
+        slotKey: elementName || "อื่นๆ",
+        slot: elementName || undefined,
         subtypeName: size || undefined,
         iconName: m.image, details,
         effects: drops.length ? ["Drops: " + drops.join(", ")] : [],
         tags: {
-          element: m.element_name || "", race: m.race_name || "",
+          element: elementName, race: raceName,
           size, level: String(m.level ?? ""),
         },
       };
