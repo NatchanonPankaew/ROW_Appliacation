@@ -63,12 +63,14 @@ export interface NormItem {
   guaranteedCard?: MonsterDrop & { progress?: number };
 }
 
-// A monster's drop entry. No display-worthy rate is shown: drop_rate_entries'
-// r/f pair looked like a percentage (r/f) but is ~10% for EVERY entry on EVERY
-// monster regardless of rarity (checked across dozens) — clearly not the real
-// per-kill chance, so it's used only to *order* drops (higher r first), never
-// displayed as a number.
-export interface MonsterDrop { itemId: number; name: string; icon?: string; quality?: number; }
+// A monster's drop entry. regularRatePct/farmRatePct are the 1x/10x-farm-mode
+// drop chance (already a plain percent, e.g. 0.0117 means 0.0117%) — see the
+// roworlddb.ts monsters branch for where or how these are decoded.
+export interface MonsterDrop {
+  itemId: number; name: string; icon?: string; quality?: number;
+  variant?: "bound" | "unbound";
+  regularRatePct?: number; farmRatePct?: number;
+}
 
 // A gear set: which pieces make it up and what each piece-count threshold grants.
 export interface EquipSet {
@@ -228,6 +230,18 @@ export function resolveIconUrl(item: NormItem, iconPaths?: IconPaths | null): st
 export function qualityInfo(quality?: number) {
   if (quality == null) return null;
   return QUALITY[quality] || { label: String(quality), color: "#888" };
+}
+
+// Mirrors roworlddb.com's formatDropRatePercent: more decimal places the
+// smaller the rate, so a 0.0117% card drop doesn't round away to "0.00%".
+export function formatDropRatePercent(pct?: number): string {
+  if (pct == null || !Number.isFinite(pct) || pct < 0) return "-";
+  let d = 2;
+  if (pct < 10) d = 3;
+  if (pct < 1) d = 4;
+  if (pct < 0.1) d = 5;
+  if (pct < 0.01) d = 6;
+  return pct.toFixed(d) + "%";
 }
 
 function statRows(stats: any): DetailRow[] {
@@ -690,18 +704,19 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
       details.unshift({ label: "Level", value: String(m.level) });
       const size = m.body?.name || m.size_name || "";
 
-      // Prefer drop_rate_entries (has icon + quality per row, and multiple
-      // quality/variant rows per item) over the plain `drops` list, deduped
-      // to one row per item (the highest-r variant — see MonsterDrop doc).
-      const rateEntries: any[] = m.drop_rate_entries || [];
-      const bestByItem = new Map<number, any>();
-      for (const e of rateEntries) {
-        const prev = bestByItem.get(e.item_id);
-        if (!prev || (e.r || 0) > (prev.r || 0)) bestByItem.set(e.item_id, e);
-      }
-      const dropSource = bestByItem.size ? [...bestByItem.values()].sort((a, b) => (b.r || 0) - (a.r || 0)) : (m.drops || []);
+      // drop_rate_entries' r/f are each already a percentage scaled by 1e6 —
+      // r is the normal (1x) rate, f is the 10x-farm-mode rate (confirmed
+      // against roworlddb.com's own monster_album.js: SITE_RATE_SCALE = 1e6,
+      // decodeSiteRatePercent(x) = Number(x) / 1e6 — NOT a r/f fraction, which
+      // is why r/f looked like a constant ~10% for every entry: farm mode is
+      // just always exactly 10x the regular rate. One row per source entry,
+      // in source order (roworlddb doesn't dedupe or re-sort them either).
+      const dropSource: any[] = m.drop_rate_entries?.length ? m.drop_rate_entries : (m.drops || []);
       const drops: MonsterDrop[] = dropSource.map((x: any) => ({
         itemId: x.item_id, name: x.name, icon: x.icon, quality: x.quality,
+        variant: x.variant,
+        regularRatePct: Number.isFinite(x.r) ? x.r / 1e6 : undefined,
+        farmRatePct: Number.isFinite(x.f) ? x.f / 1e6 : undefined,
       })).filter((x: MonsterDrop) => x.name);
 
       const guaranteedCard: (MonsterDrop & { progress?: number }) | undefined = m.guaranteed_card

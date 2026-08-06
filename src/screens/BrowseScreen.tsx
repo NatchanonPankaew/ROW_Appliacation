@@ -4,7 +4,7 @@ import {
   TouchableOpacity, StyleSheet, Image, Modal, ScrollView,
 } from "react-native";
 import {
-  fetchData, fetchIconPaths, resolveIconUrl, qualityInfo,
+  fetchData, fetchIconPaths, resolveIconUrl, qualityInfo, formatDropRatePercent,
   QUALITY, KIND_HAS_QUALITY, NormItem, IconPaths, Kind, slotOrder, JobOpt, DetailRow,
 } from "../api/roworlddb";
 
@@ -170,19 +170,30 @@ function DetailModal({ item, iconUrl, locale, jobNames, iconPaths, onClose }: {
                   <View style={styles.dropRow}>
                     <Image source={{ uri: resolveIconUrl({ iconName: item.guaranteedCard.icon } as NormItem, iconPaths) || undefined }}
                       style={styles.dropIcon} resizeMode="contain" />
-                    <Text style={styles.dropName} numberOfLines={1}>{item.guaranteedCard.name}</Text>
+                    <Text style={[styles.dropName, { flex: 1 }]} numberOfLines={1}>{item.guaranteedCard.name}</Text>
                     <Text style={styles.dropGuaranteed}>
                       {L("การันตีใน", "guaranteed in")} {item.guaranteedCard.progress ?? "?"} {L("ตัว", "kills")}
                     </Text>
                   </View>
                 )}
+                <View style={styles.dropHeadRow}>
+                  <Text style={[styles.dropRateHead, { flex: 1 }]}>{L("ไอเท็ม", "Item")}</Text>
+                  <Text style={styles.dropRateHead}>1x Rate</Text>
+                  <Text style={styles.dropRateHead}>10x Rate</Text>
+                </View>
                 {item.drops!.map((dr, i) => {
                   const dq = qualityInfo(dr.quality);
                   return (
                     <View key={i} style={[styles.dropRow, dq && { borderLeftColor: dq.color, borderLeftWidth: 3 }]}>
                       <Image source={{ uri: resolveIconUrl({ iconName: dr.icon } as NormItem, iconPaths) || undefined }}
                         style={styles.dropIcon} resizeMode="contain" />
-                      <Text style={styles.dropName} numberOfLines={1}>{dr.name}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.dropName} numberOfLines={1}>
+                          {dr.name}{dr.variant ? ` (${dr.variant === "bound" ? "B" : "U"})` : ""}
+                        </Text>
+                      </View>
+                      <Text style={styles.dropRate}>{formatDropRatePercent(dr.regularRatePct)}</Text>
+                      <Text style={styles.dropRate}>{formatDropRatePercent(dr.farmRatePct)}</Text>
                     </View>
                   );
                 })}
@@ -617,8 +628,11 @@ const styles = StyleSheet.create({
   dropRow: { flexDirection: "row", alignItems: "center", paddingVertical: 6,
     borderBottomWidth: 1, borderBottomColor: "#E6EDF7", paddingLeft: 4 },
   dropIcon: { width: 28, height: 28, marginRight: 8 },
-  dropName: { color: "#41506B", fontSize: 13, flex: 1 },
+  dropName: { color: "#41506B", fontSize: 13 },
   dropGuaranteed: { color: "#E8B339", fontSize: 11, fontWeight: "bold", marginLeft: 6 },
+  dropHeadRow: { flexDirection: "row", paddingLeft: 4, paddingTop: 8, paddingBottom: 4 },
+  dropRateHead: { color: "#8A97AD", fontSize: 11, fontWeight: "bold", width: 64, textAlign: "right" },
+  dropRate: { color: "#5A6B8C", fontSize: 12, width: 64, textAlign: "right" },
   story: { color: "#8A97AD", fontSize: 13, fontStyle: "italic", marginTop: 16, lineHeight: 20 },
   closeBtn: { marginTop: 16, backgroundColor: "#6E83E8", borderRadius: 10,
     paddingVertical: 12, alignItems: "center" },
