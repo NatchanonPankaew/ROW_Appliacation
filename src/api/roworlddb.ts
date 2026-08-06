@@ -58,7 +58,17 @@ export interface NormItem {
   emberIcon?: string;
   // set/suit effects this item belongs to
   sets?: EquipSet[];
+  // --- monster album ---
+  drops?: MonsterDrop[];
+  guaranteedCard?: MonsterDrop & { progress?: number };
 }
+
+// A monster's drop entry. No display-worthy rate is shown: drop_rate_entries'
+// r/f pair looked like a percentage (r/f) but is ~10% for EVERY entry on EVERY
+// monster regardless of rarity (checked across dozens) — clearly not the real
+// per-kill chance, so it's used only to *order* drops (higher r first), never
+// displayed as a number.
+export interface MonsterDrop { itemId: number; name: string; icon?: string; quality?: number; }
 
 // A gear set: which pieces make it up and what each piece-count threshold grants.
 export interface EquipSet {
@@ -671,14 +681,34 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
   if (kind === "monsters") {
     const d = await getJSON(BASE_DATA + "/monster-album/data/monster_album_" + locale + ".json");
     items = (d.monsters || []).map((m: any) => {
-      const drops = (m.drops || []).map((x: any) => x.name).filter(Boolean);
       const details = statRows(m.stats);
       const raceName = m.race?.name || m.race_name || "";
       const elementName = m.element?.name || m.element_name || "";
+      const typeName = m.type?.name || "";
       if (raceName) details.unshift({ label: "Race", value: raceName });
       if (elementName) details.unshift({ label: "Element", value: elementName });
       details.unshift({ label: "Level", value: String(m.level) });
       const size = m.body?.name || m.size_name || "";
+
+      // Prefer drop_rate_entries (has icon + quality per row, and multiple
+      // quality/variant rows per item) over the plain `drops` list, deduped
+      // to one row per item (the highest-r variant — see MonsterDrop doc).
+      const rateEntries: any[] = m.drop_rate_entries || [];
+      const bestByItem = new Map<number, any>();
+      for (const e of rateEntries) {
+        const prev = bestByItem.get(e.item_id);
+        if (!prev || (e.r || 0) > (prev.r || 0)) bestByItem.set(e.item_id, e);
+      }
+      const dropSource = bestByItem.size ? [...bestByItem.values()].sort((a, b) => (b.r || 0) - (a.r || 0)) : (m.drops || []);
+      const drops: MonsterDrop[] = dropSource.map((x: any) => ({
+        itemId: x.item_id, name: x.name, icon: x.icon, quality: x.quality,
+      })).filter((x: MonsterDrop) => x.name);
+
+      const guaranteedCard: (MonsterDrop & { progress?: number }) | undefined = m.guaranteed_card
+        ? { itemId: m.guaranteed_card.item_id, name: m.guaranteed_card.name, icon: m.guaranteed_card.icon,
+            quality: m.guaranteed_card.quality, progress: m.guaranteed_card_drop_progress }
+        : undefined;
+
       return {
         id: m.id, title: m.name,
         subtitle: ["Lv." + m.level, raceName, elementName].filter(Boolean).join("  -  "),
@@ -687,9 +717,9 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
         slot: elementName || undefined,
         subtypeName: size || undefined,
         iconName: m.image, details,
-        effects: drops.length ? ["Drops: " + drops.join(", ")] : [],
+        drops, guaranteedCard,
         tags: {
-          element: elementName, race: raceName,
+          element: elementName, race: raceName, type: typeName,
           size, level: String(m.level ?? ""),
         },
       };
@@ -697,6 +727,8 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
     const filters = [
       buildFilter("element", "Element", items),
       buildFilter("size", "Size", items),
+      buildFilter("race", "Race", items),
+      buildFilter("type", "Type", items),
     ].filter(Boolean) as FilterDef[];
     return { items, filters };
   }

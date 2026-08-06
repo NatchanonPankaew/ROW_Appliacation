@@ -53,9 +53,9 @@ function Row({ item, iconUrl, onPress }: { item: NormItem; iconUrl: string | nul
   );
 }
 
-function DetailModal({ item, iconUrl, locale, jobNames, onClose }: {
+function DetailModal({ item, iconUrl, locale, jobNames, iconPaths, onClose }: {
   item: NormItem; iconUrl: string | null;
-  locale?: string; jobNames?: Record<number, string>; onClose: () => void;
+  locale?: string; jobNames?: Record<number, string>; iconPaths?: IconPaths | null; onClose: () => void;
 }) {
   const q = qualityInfo(item.quality);
   const th = locale === "th-TH";
@@ -163,6 +163,31 @@ function DetailModal({ item, iconUrl, locale, jobNames, onClose }: {
                 ))}
               </View>
             ))}
+            {(item.drops || []).length > 0 && (
+              <View style={styles.detailTable}>
+                <Text style={styles.refineHead}>{L("ของดรอป", "Drops")}</Text>
+                {item.guaranteedCard && (
+                  <View style={styles.dropRow}>
+                    <Image source={{ uri: resolveIconUrl({ iconName: item.guaranteedCard.icon } as NormItem, iconPaths) || undefined }}
+                      style={styles.dropIcon} resizeMode="contain" />
+                    <Text style={styles.dropName} numberOfLines={1}>{item.guaranteedCard.name}</Text>
+                    <Text style={styles.dropGuaranteed}>
+                      {L("การันตีใน", "guaranteed in")} {item.guaranteedCard.progress ?? "?"} {L("ตัว", "kills")}
+                    </Text>
+                  </View>
+                )}
+                {item.drops!.map((dr, i) => {
+                  const dq = qualityInfo(dr.quality);
+                  return (
+                    <View key={i} style={[styles.dropRow, dq && { borderLeftColor: dq.color, borderLeftWidth: 3 }]}>
+                      <Image source={{ uri: resolveIconUrl({ iconName: dr.icon } as NormItem, iconPaths) || undefined }}
+                        style={styles.dropIcon} resizeMode="contain" />
+                      <Text style={styles.dropName} numberOfLines={1}>{dr.name}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
             {item.story ? <Text style={styles.story}>{item.story}</Text> : null}
           </ScrollView>
           <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
@@ -215,6 +240,7 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
   const [slotFilter, setSlotFilter] = useState<string | null>(null);
   const [subtypeFilter, setSubtypeFilter] = useState<string | null>(null);
   const [levelFilter, setLevelFilter] = useState<string | null>(null);
+  const [raceFilter, setRaceFilter] = useState<string | null>(null);
   const [detail, setDetail] = useState<NormItem | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [runeColor, setRuneColor] = useState(5);   // rune ember color (1-5)
@@ -223,11 +249,17 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
   const hasQuality = KIND_HAS_QUALITY[kind];
   // level-range filter (monsters carry tags.level)
   const hasLevel = useMemo(() => items.some((it) => it.tags?.level), [items]);
+  // race filter (monsters only — mirrors roworlddb.com's Race dropdown)
+  const raceChips = useMemo(() => {
+    const set = new Set<string>();
+    items.forEach((it) => { if (it.tags?.race) set.add(it.tags.race); });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [items]);
   const activeFilters =
     (slotFilter != null ? 1 : 0) + (subtypeFilter != null ? 1 : 0) +
-    (qFilter != null ? 1 : 0) + (levelFilter != null ? 1 : 0);
+    (qFilter != null ? 1 : 0) + (levelFilter != null ? 1 : 0) + (raceFilter != null ? 1 : 0);
 
-  useEffect(() => { setSlotFilter(null); setQFilter(null); setSubtypeFilter(null); setLevelFilter(null); }, [kind]);
+  useEffect(() => { setSlotFilter(null); setQFilter(null); setSubtypeFilter(null); setLevelFilter(null); setRaceFilter(null); }, [kind]);
   useEffect(() => { setSubtypeFilter(null); }, [slotFilter]);
 
   const load = useCallback(async (loc: string) => {
@@ -287,11 +319,12 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
         const b = LEVEL_BUCKETS.find((x) => x.key === levelFilter);
         if (b && !(lv >= b.min && lv <= b.max)) return false;
       }
+      if (raceFilter != null && it.tags?.race !== raceFilter) return false;
       if (tokens.length) { const t = textOf(it); if (!tokens.every((tok) => t.includes(tok))) return false; }
       return true;
     });
     return groupByType(filtered);
-  }, [items, query, qFilter, slotFilter, subtypeFilter, levelFilter]);
+  }, [items, query, qFilter, slotFilter, subtypeFilter, levelFilter, raceFilter]);
 
   const total = useMemo(() => sections.reduce((n, s) => n + s.data.length, 0), [sections]);
   const multiSection = sections.length > 1;
@@ -341,7 +374,7 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
         </View>
       )}
 
-      {(slotChips.length > 1 || subtypeChips.length > 1 || hasQuality) && (
+      {(slotChips.length > 1 || subtypeChips.length > 1 || hasQuality || raceChips.length > 1) && (
         <TouchableOpacity style={styles.filterToggle} activeOpacity={0.7}
           onPress={() => setFiltersOpen((o) => !o)}>
           <Text style={styles.filterToggleText}>
@@ -407,6 +440,26 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
         </View>
       )}
 
+      {raceChips.length > 1 && (
+        <View style={styles.filterRow}>
+          <TouchableOpacity onPress={() => setRaceFilter(null)}
+            style={[styles.fChip, raceFilter == null && styles.fChipOn]}>
+            <Text style={[styles.fText, raceFilter == null && styles.fTextOn]}>
+              {locale === "th-TH" ? "ทุกเผ่า" : "All races"}
+            </Text>
+          </TouchableOpacity>
+          {raceChips.map((r) => {
+            const on = raceFilter === r;
+            return (
+              <TouchableOpacity key={r} onPress={() => setRaceFilter(on ? null : r)}
+                style={[styles.fChip, on && styles.fChipOn]}>
+                <Text style={[styles.fText, on && styles.fTextOn]}>{r}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+
       {hasQuality && (
         <View style={styles.filterRow}>
           <TouchableOpacity onPress={() => setQFilter(null)}
@@ -464,6 +517,7 @@ export default function BrowseScreen({ kind }: { kind: Kind }) {
           iconUrl={iconFor(detail)}
           locale={locale}
           jobNames={jobNames}
+          iconPaths={iconPaths}
           onClose={() => setDetail(null)}
         />
       )}
@@ -560,6 +614,11 @@ const styles = StyleSheet.create({
   condLine: { color: "#5A6B8C", fontSize: 13, paddingVertical: 5,
     borderBottomWidth: 1, borderBottomColor: "#E6EDF7", lineHeight: 19 },
   setComponents: { color: "#8A97AD", fontSize: 12, paddingVertical: 6, lineHeight: 18 },
+  dropRow: { flexDirection: "row", alignItems: "center", paddingVertical: 6,
+    borderBottomWidth: 1, borderBottomColor: "#E6EDF7", paddingLeft: 4 },
+  dropIcon: { width: 28, height: 28, marginRight: 8 },
+  dropName: { color: "#41506B", fontSize: 13, flex: 1 },
+  dropGuaranteed: { color: "#E8B339", fontSize: 11, fontWeight: "bold", marginLeft: 6 },
   story: { color: "#8A97AD", fontSize: 13, fontStyle: "italic", marginTop: 16, lineHeight: 20 },
   closeBtn: { marginTop: 16, backgroundColor: "#6E83E8", borderRadius: 10,
     paddingVertical: 12, alignItems: "center" },
