@@ -198,6 +198,13 @@ export function resolveIconUrl(item: NormItem, iconPaths?: IconPaths | null): st
   if (iconPaths && item.iconName && iconPaths[item.iconName]) {
     return BASE_IMG + iconPaths[item.iconName];
   }
+  // Card icons not yet indexed in icon_paths.json (new TW-sourced cards land
+  // here before the next full data sync catches up) still live at the same
+  // predictable item/<name>.webp path every other card icon uses — verified
+  // against the live media host, not guessed.
+  if (item.iconName && item.iconName.startsWith("icon_item_card_")) {
+    return BASE_IMG + "item/" + item.iconName + ".webp";
+  }
   if (item.iconUrl) {
     if (item.iconUrl.startsWith("http")) return item.iconUrl;
     // server-absolute path like "/media/images/pet/x.webp" -> prefix the host
