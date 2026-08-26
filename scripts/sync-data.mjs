@@ -18,6 +18,7 @@ import { applyTwAffixTh } from "./apply-tw-affix-th.mjs";
 import { mergeTwEquipment } from "./merge-tw-equipment.mjs";
 import { applyTwEquipTh } from "./apply-tw-equip-th.mjs";
 import { mergeTwCards } from "./merge-tw-cards.mjs";
+import { mergeTwPets } from "./merge-tw-pets.mjs";
 
 const ORIGIN = "https://roworlddb.com";
 const BASE = ORIGIN + "/sea";
@@ -164,6 +165,9 @@ async function main() {
   // see merge-tw-cards.mjs) — only the ones with a verified translation get
   // added, so this stays a no-op for anything TW adds beyond that list.
   await mergeTwCards();
+  // Pull the 3 pets Taiwan has that SEA doesn't (Fels/Aegir/Flora), translated
+  // by hand — see merge-tw-pets.mjs.
+  await mergeTwPets();
 
   console.log("\nDone. " + okCount + " ok, " + failCount + " failed.");
 }
