@@ -95,13 +95,30 @@ export interface MapMarker {
   mysterySubtype?: CommunityChestPoint["subtype"]; // known weather sub-type (mystery_chest only) — shown in the tap modal, not on the pin
 }
 
+// roworlddb's own map_index no longer lists a config for Glast Heim (map/scene
+// 108) — its world_maps and map_configs entries for it are just gone as of
+// 2026-09 — even though its interactive_placing data (11 expl chests, 1 guard
+// chest, 8 mystery chests, 2 kafra, 6 observation points) still tags entries
+// with sceneId 108. Without a config (name/background image/coordinate
+// system) those points have nowhere to render, so the whole region silently
+// vanishes from the map picker despite having real, fetchable points.
+// Patched back in from the last known-good upstream snapshot so the region
+// stays selectable regardless of what roworlddb currently exposes in its own
+// map list.
+const MANUAL_MAP_CONFIGS: Record<string, MapConfig> = {
+  "108": { map_id: 108, name: "Glast Heim", pic_res: "icon_map_10015", scene_center_xz: [160, 160], scene_extent_xz: [280, 280] },
+};
+
 const _mapIndexCache = new Map<string, MapIndex>();
 export async function fetchMapIndex(locale: string): Promise<MapIndex> {
   const cached = _mapIndexCache.get(locale);
   if (cached) return cached;
-  const d = await getJSON(BASE_DATA + "/map-simulator/data/map_index_" + locale + ".json");
+  const d = (await getJSON(BASE_DATA + "/map-simulator/data/map_index_" + locale + ".json")) as MapIndex;
+  for (const [id, cfg] of Object.entries(MANUAL_MAP_CONFIGS)) {
+    if (!d.map_configs[id]) d.map_configs[id] = cfg;
+  }
   _mapIndexCache.set(locale, d);
-  return d as MapIndex;
+  return d;
 }
 
 const _spawnCache = new Map<string, MonsterSpawnsRaw>();
