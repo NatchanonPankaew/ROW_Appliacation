@@ -46,6 +46,11 @@ let iconPaths = {};
 // Mirrors resolveIconUrl() in src/api/roworlddb.ts exactly.
 function resolve(iconName, iconUrl) {
   if (iconName && iconPaths[iconName]) return BASE_IMG + iconPaths[iconName];
+  // Card icons not yet indexed in icon_paths.json (new TW-sourced cards) still
+  // live at the same predictable item/<name>.webp path — mirrors the fallback
+  // in resolveIconUrl() (src/api/roworlddb.ts), which this script must match
+  // exactly or these cards' images never get queued for download.
+  if (iconName && iconName.startsWith("icon_item_card_")) return BASE_IMG + "item/" + iconName + ".webp";
   if (iconUrl) {
     if (iconUrl.startsWith("http")) return iconUrl;
     if (iconUrl.startsWith("/")) return ORIGIN + iconUrl;
