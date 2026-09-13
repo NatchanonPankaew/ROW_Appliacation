@@ -155,8 +155,8 @@ export const LOCALES = ["en-US", "th-TH", "zh-TW"];
 export const KIND_HAS_QUALITY: Record<Kind, boolean> = {
   character: false,
   cards: true, equipment: true, pets: true, shop: true, runes: true, affix: true,
-  gems: true,
-  monsters: false, skills: false, maps: false, apocalypse: false,
+  gems: true, apocalypse: true,
+  monsters: false, skills: false, maps: false,
 };
 
 // Lightweight response obfuscation. Production data files are XOR-scrambled with
@@ -800,19 +800,45 @@ export async function fetchData(kind: Kind, locale: string): Promise<FetchResult
   }
 
   if (kind === "apocalypse") {
+    // Apocalypse is a per-gear-part affix pool (like the Affix tab, but its
+    // own separate system): each entry is one rollable stat line, tagged with
+    // a quality tier, which of the 6 gear parts it can appear on, an optional
+    // job restriction, and a flavor category (element / race / shape / etc.).
+    // The real shape (quality/category/keyword/title/detail_text/job_labels/
+    // part_keys) doesn't match what this used to read (e.id/e.name/
+    // e.quality_name/e.category as a plain value) — that mismatch is why the
+    // Apoc tab rendered nothing.
     const d = await getJSON(BASE_DATA + "/apocalypse-simulator/data/apocalypse_planner_" + locale + ".json");
-    items = (d.entries || []).map((e: any) => ({
-      id: e.id, title: e.name,
-      subtitle: [e.quality_name, e.category, e.type].filter(Boolean).join("  -  "),
-      tags: { quality: e.quality_name || "", category: String(e.category || "") },
-      details: [
-        e.quality_name && { label: "Quality", value: e.quality_name },
-        e.category && { label: "Category", value: String(e.category) },
-      ].filter(Boolean) as DetailRow[],
-    }));
+    const th = locale === "th-TH";
+    const PART_LABEL: Record<string, { th: string; en: string }> = {
+      weapon: { th: "อาวุธ", en: "Weapon" },
+      offhand: { th: "มือรอง", en: "Off-hand" },
+      armor: { th: "เกราะ", en: "Armor" },
+      cloak: { th: "ผ้าคลุม", en: "Cloak" },
+      shoes: { th: "รองเท้า", en: "Shoes" },
+      accessory: { th: "เครื่องประดับ", en: "Accessory" },
+    };
+    items = (d.entries || []).map((e: any, i: number) => {
+      const part: string | undefined = e.part_keys?.[0];
+      const partLabel = part ? (PART_LABEL[part] ? (th ? PART_LABEL[part].th : PART_LABEL[part].en) : part) : undefined;
+      const jobNames = (e.job_labels || []).map((j: any) => stripColorTags(j.name)).filter(Boolean);
+      const categoryName = e.category?.name || (th ? "ทั่วไป" : "General");
+      return {
+        id: [e.category?.id, e.keyword?.id, part, e.quality, i].join("_"),
+        title: stripColorTags(e.title) || e.keyword?.name || "-",
+        subtitle: [categoryName, partLabel].filter(Boolean).join(" · "),
+        quality: e.quality,
+        slot: partLabel,
+        slotKey: part ? canonicalSlot(part) : undefined,
+        effects: [stripColorTags(e.detail_text)].filter(Boolean),
+        details: jobNames.length ? [{ label: th ? "อาชีพ" : "Jobs", value: jobNames.join(", ") }] : [],
+        jobAll: jobNames.length === 0,
+        tags: { quality: qualityTag(e.quality), category: categoryName, slot: part || "" },
+      };
+    });
     const filters = [
-      buildFilter("quality", "Quality", items),
-      buildFilter("category", "Category", items),
+      buildFilter("quality", th ? "คุณภาพ" : "Quality", items),
+      buildFilter("category", th ? "หมวดหมู่" : "Category", items),
     ].filter(Boolean) as FilterDef[];
     return { items, filters };
   }
