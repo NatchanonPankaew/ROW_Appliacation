@@ -95,41 +95,19 @@ export interface MapMarker {
   mysterySubtype?: CommunityChestPoint["subtype"]; // known weather sub-type (mystery_chest only) — shown in the tap modal, not on the pin
 }
 
-// roworlddb's en-US/th-TH map_index dropped the entire Glast Heim dungeon
-// complex as of 2026-09 (its zh-TW map_index still has it in full, confirming
-// this is missing data, not a removed feature): the outdoor ruins (scene 108)
-// plus its Abbey (10805) and Underground Cemetery (10806) sub-maps. Their
-// interactive_placing data (chests, kafra, observation points) still tags
-// entries with these sceneIds — 108 alone has 11 expl chests, 1 guard chest,
-// 8 mystery chests, 2 kafra and 6 observation points — but without a config
-// (name/background image/coordinate system) those points have nowhere to
-// render, so the whole region silently vanishes from the map picker despite
-// having real, fetchable points. Patched back in from zh-TW's still-intact
-// config (translated) so the region stays selectable regardless of what
-// roworlddb's en-US/th-TH exposes in their own map list.
-//
-// Two known gaps this doesn't cover, for lack of any locale with real config
-// data to recover: sceneIds 109/110/111 (8+5+3 observation points, likely
-// more Glast Heim sub-areas — no config or monster-spawn view for them in
-// ANY locale, so their coordinate space can't be reconstructed) and the
-// mvp/elite/mini monster markers for 108/10805/10806 themselves (zh-TW's
-// map_monster_spawns still has real spawn groups for all three; en-US/th-TH
-// dropped those too — chests/kafra/observation still show, monster pins
-// won't, since that's separate raw data this patch doesn't merge).
-const MANUAL_MAP_CONFIGS: Record<string, MapConfig> = {
-  "108": { map_id: 108, name: "Glast Heim", pic_res: "icon_map_10015", scene_center_xz: [160, 160], scene_extent_xz: [280, 280] },
-  "10805": { map_id: 10805, name: "Glast Heim Abbey", pic_res: "icon_map_20021", scene_center_xz: [146, 140], scene_extent_xz: [230, 230] },
-  "10806": { map_id: 10806, name: "Glast Heim Underground Cemetery", pic_res: "icon_map_20023", scene_center_xz: [118, 122], scene_extent_xz: [220, 220] },
-};
+// roworlddb's en-US/th-TH map-simulator data dropped the entire Glast Heim
+// dungeon complex (9 scenes: the outdoor ruins + all 8 interior floors) —
+// zh-TW's data still has it in full, confirming this is missing data, not
+// removed content. Restored at the data-sync level instead of patched here:
+// see scripts/merge-tw-maps.mjs (map_configs + mvp/elite/mini spawn markers,
+// run as part of `npm run sync:data`) — the committed public/data files
+// already have it merged in, so no runtime patch is needed.
 
 const _mapIndexCache = new Map<string, MapIndex>();
 export async function fetchMapIndex(locale: string): Promise<MapIndex> {
   const cached = _mapIndexCache.get(locale);
   if (cached) return cached;
   const d = (await getJSON(BASE_DATA + "/map-simulator/data/map_index_" + locale + ".json")) as MapIndex;
-  for (const [id, cfg] of Object.entries(MANUAL_MAP_CONFIGS)) {
-    if (!d.map_configs[id]) d.map_configs[id] = cfg;
-  }
   _mapIndexCache.set(locale, d);
   return d;
 }
