@@ -13,6 +13,8 @@ import { fileURLToPath } from "node:url";
 import { translateTwSkills } from "./translate-tw-skills.mjs";
 import { mergeTwDruid } from "./merge-tw-druid.mjs";
 import { translateTwDruid } from "./translate-tw-druid.mjs";
+import { mergeTwSageRogue } from "./merge-tw-sage-rogue.mjs";
+import { translateTwSageRogue } from "./translate-tw-sage-rogue.mjs";
 import { mergeTwAffixes } from "./merge-tw-affixes.mjs";
 import { applyTwAffixTh } from "./apply-tw-affix-th.mjs";
 import { mergeTwEquipment } from "./merge-tw-equipment.mjs";
@@ -152,6 +154,11 @@ async function main() {
   // into the tree (SEA hasn't shipped it), then localize its skills to EN/TH.
   await mergeTwDruid();
   await translateTwDruid();
+  // Pull Taiwan's real Sage/Scholar (322/323) and Rogue/Stalker (622/623) skill
+  // kits in — SEA still ships 322/622/623 as empty stubs and lacks 323 outright
+  // — then localize the Chinese text to EN/TH (zh-TW is left as-is).
+  await mergeTwSageRogue();
+  await translateTwSageRogue();
   // Pull Taiwan's fuller affix set (instrument/whip/knuckle + new classes) in,
   // keeping SEA's existing localized affix text.
   await mergeTwAffixes();

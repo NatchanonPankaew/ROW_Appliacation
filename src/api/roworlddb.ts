@@ -1594,7 +1594,10 @@ export function skillPathTo(index: Record<number, JobNode>, target: number): num
 // Playable classes the SEA skills_index still flags has_skills=false, but whose
 // job skill files we populate from the Taiwan dataset (see scripts/sync-data.mjs).
 // Force them visible like every other class. Drop an id once SEA flags it itself.
-export const SKILL_FORCE_JOBS = new Set<number>([722, 422, 432, 723, 423, 433]); // Alchemist/Bard/Dancer + T2 Creator/Clown/Gypsy
+export const SKILL_FORCE_JOBS = new Set<number>([
+  722, 422, 432, 723, 423, 433, // Alchemist/Bard/Dancer + T2 Creator/Clown/Gypsy
+  322, 323, 622, 623, // Sage/Scholar, Rogue/Stalker
+]);
 
 // every job in the path (incl. self) must have skills (matches the site's filter),
 // or the class is force-shown and at least one ancestor carries skills.
