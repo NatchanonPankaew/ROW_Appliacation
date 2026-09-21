@@ -46,12 +46,36 @@ function castInfo(s: SkillNode): string {
   return parts.join("  ·  ");
 }
 
-/* ---- one skill row inside the detail sheet ---- */
-function SkillRow({ skill, iconUrl }: { skill: SkillNode; iconUrl: string | null }) {
+/* ---- small icon tile inside the grid; tap to open/close its detail card ---- */
+function SkillTile({ skill, iconUrl, selected, onPress }: {
+  skill: SkillNode; iconUrl: string | null; selected: boolean; onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      style={[styles.tile, selected && styles.tileOn]}
+      activeOpacity={0.75}
+      onPress={onPress}
+    >
+      <View style={[styles.tileIconWrap, skill.passive ? styles.tileIconPassive : styles.tileIconActive]}>
+        {iconUrl ? (
+          <Image source={{ uri: iconUrl }} style={styles.tileIcon} resizeMode="contain" />
+        ) : (
+          <View style={[styles.tileIcon, styles.iconFallback]} />
+        )}
+      </View>
+      <Text style={styles.tileName} numberOfLines={2}>{skill.name}</Text>
+    </TouchableOpacity>
+  );
+}
+
+/* ---- detail card for whichever skill tile is currently selected ---- */
+function SkillDetail({ skill, iconUrl, onClose }: {
+  skill: SkillNode; iconUrl: string | null; onClose: () => void;
+}) {
   const desc = skillDesc(skill);
   const cast = castInfo(skill);
   return (
-    <View style={styles.skillRow}>
+    <View style={styles.detailCard}>
       <View style={styles.skillIconWrap}>
         {iconUrl ? (
           <Image source={{ uri: iconUrl }} style={styles.skillIcon} resizeMode="contain" />
@@ -61,16 +85,48 @@ function SkillRow({ skill, iconUrl }: { skill: SkillNode; iconUrl: string | null
       </View>
       <View style={{ flex: 1 }}>
         <View style={styles.skillTitleRow}>
-          <Text style={styles.skillName} numberOfLines={1}>{skill.name}</Text>
+          <Text style={styles.skillName} numberOfLines={2}>{skill.name}</Text>
           <View style={[styles.kindBadge, skill.passive ? styles.passiveBadge : styles.activeBadge]}>
             <Text style={styles.kindBadgeText}>{skill.passive ? "Passive" : "Active"}</Text>
           </View>
         </View>
         <Text style={styles.skillMeta}>เลเวลสูงสุด {skill.maxLevel}</Text>
         {!!cast && <Text style={styles.skillCast}>{cast}</Text>}
-        {!!desc && <Text style={styles.skillDesc} numberOfLines={4}>{desc}</Text>}
+        {!!desc && <Text style={styles.skillDesc}>{desc}</Text>}
       </View>
+      <TouchableOpacity style={styles.detailClose} onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <Text style={styles.detailCloseText}>×</Text>
+      </TouchableOpacity>
     </View>
+  );
+}
+
+/* ---- icon grid for one Active/Passive group, with the tapped skill's detail
+   card pinned right below it so context isn't lost ---- */
+function SkillGrid({ title, list, skillIcon, selectedId, onSelect }: {
+  title: string; list: SkillNode[];
+  skillIcon: (icon?: string) => string | null;
+  selectedId: string | null; onSelect: (id: string | null) => void;
+}) {
+  const selected = list.find((s) => s.kindId === selectedId) || null;
+  return (
+    <>
+      <Text style={styles.groupHead}>{title} ({list.length})</Text>
+      <View style={styles.grid}>
+        {list.map((s) => (
+          <SkillTile
+            key={s.kindId}
+            skill={s}
+            iconUrl={skillIcon(s.icon)}
+            selected={s.kindId === selectedId}
+            onPress={() => onSelect(s.kindId === selectedId ? null : s.kindId)}
+          />
+        ))}
+      </View>
+      {selected && (
+        <SkillDetail skill={selected} iconUrl={skillIcon(selected.icon)} onClose={() => onSelect(null)} />
+      )}
+    </>
   );
 }
 
@@ -81,6 +137,7 @@ function JobSkillsModal({ jobId, index, locale, iconPaths, onClose }: {
 }) {
   const [skills, setSkills] = useState<Record<number, SkillNode[]>>({});
   const [loading, setLoading] = useState(true);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   const path = useMemo(() => skillPathTo(index, jobId), [index, jobId]);
 
@@ -135,16 +192,22 @@ function JobSkillsModal({ jobId, index, locale, iconPaths, onClose }: {
                       <Text style={styles.tierCount}>{list.length}</Text>
                     </View>
                     {actives.length > 0 && (
-                      <>
-                        <Text style={styles.groupHead}>Active · ออกฤทธิ์ ({actives.length})</Text>
-                        {actives.map((s) => <SkillRow key={s.kindId} skill={s} iconUrl={skillIcon(s.icon)} />)}
-                      </>
+                      <SkillGrid
+                        title="Active · ออกฤทธิ์"
+                        list={actives}
+                        skillIcon={skillIcon}
+                        selectedId={selectedKey?.startsWith(id + ":") ? selectedKey.slice(String(id).length + 1) : null}
+                        onSelect={(kindId) => setSelectedKey(kindId ? id + ":" + kindId : null)}
+                      />
                     )}
                     {passives.length > 0 && (
-                      <>
-                        <Text style={styles.groupHead}>Passive · พาสซีฟ ({passives.length})</Text>
-                        {passives.map((s) => <SkillRow key={s.kindId} skill={s} iconUrl={skillIcon(s.icon)} />)}
-                      </>
+                      <SkillGrid
+                        title="Passive · พาสซีฟ"
+                        list={passives}
+                        skillIcon={skillIcon}
+                        selectedId={selectedKey?.startsWith(id + ":") ? selectedKey.slice(String(id).length + 1) : null}
+                        onSelect={(kindId) => setSelectedKey(kindId ? id + ":" + kindId : null)}
+                      />
                     )}
                   </View>
                 );
@@ -322,13 +385,27 @@ const styles = StyleSheet.create({
   tierTitle: { color: "#5566C7", fontSize: 15, fontWeight: "bold", lineHeight: 22 },
   tierCount: { color: "#8A97AD", fontSize: 12, fontWeight: "bold" },
 
-  // skill row
-  skillRow: { flexDirection: "row", backgroundColor: "#FFFFFF", borderRadius: 10,
-    padding: 10, marginBottom: 6, borderWidth: 1, borderColor: "#DCE6F4" },
+  // icon grid (replaces the old always-expanded row list)
+  grid: { flexDirection: "row", flexWrap: "wrap", marginBottom: 4 },
+  tile: { width: 74, alignItems: "center", paddingVertical: 6, paddingHorizontal: 2,
+    marginRight: 2, marginBottom: 2, borderRadius: 10, borderWidth: 1.5, borderColor: "transparent" },
+  tileOn: { backgroundColor: "#E9EDFC", borderColor: "#6E83E8" },
+  tileIconWrap: { width: 44, height: 44, borderRadius: 10, alignItems: "center",
+    justifyContent: "center", marginBottom: 4, borderWidth: 2 },
+  tileIconActive: { backgroundColor: "#EAF1FB", borderColor: "#4F8EE6" },
+  tileIconPassive: { backgroundColor: "#EAF8F1", borderColor: "#3FB57E" },
+  tileIcon: { width: 34, height: 34 },
+  tileName: { color: "#41506B", fontSize: 10.5, fontWeight: "600", textAlign: "center", lineHeight: 13 },
+
+  // detail card shown below a grid when one of its tiles is tapped
+  detailCard: { flexDirection: "row", backgroundColor: "#FFFFFF", borderRadius: 10,
+    padding: 10, marginTop: 4, marginBottom: 10, borderWidth: 1.5, borderColor: "#6E83E8" },
+  detailClose: { position: "absolute", top: 4, right: 6, padding: 4 },
+  detailCloseText: { color: "#A6B2C7", fontSize: 18, fontWeight: "bold", lineHeight: 20 },
   skillIconWrap: { width: 40, height: 40, borderRadius: 8, backgroundColor: "#EAF1FB",
     alignItems: "center", justifyContent: "center", marginRight: 10 },
   skillIcon: { width: 32, height: 32 },
-  skillTitleRow: { flexDirection: "row", alignItems: "center", marginBottom: 2 },
+  skillTitleRow: { flexDirection: "row", alignItems: "center", marginBottom: 2, paddingRight: 16 },
   skillName: { color: "#41506B", fontSize: 14, fontWeight: "bold", flex: 1, marginRight: 8, lineHeight: 21 },
   kindBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 },
   activeBadge: { backgroundColor: "#4F8EE6" },
