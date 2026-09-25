@@ -35,7 +35,7 @@ const MAP_NAME_EN = {
 };
 
 // monster_id -> best-effort English name (see file header)
-const MONSTER_NAME_EN = {
+export const MONSTER_NAME_EN = {
   55025: "Contaminated Ghost Archer",
   55026: "Fangtooth Beast",
   55027: "Owl Chief",

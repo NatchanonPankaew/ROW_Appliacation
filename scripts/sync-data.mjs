@@ -22,6 +22,7 @@ import { applyTwEquipTh } from "./apply-tw-equip-th.mjs";
 import { mergeTwCards } from "./merge-tw-cards.mjs";
 import { mergeTwPets } from "./merge-tw-pets.mjs";
 import { mergeTwMaps } from "./merge-tw-maps.mjs";
+import { mergeTwMonsters } from "./merge-tw-monsters.mjs";
 
 const ORIGIN = "https://roworlddb.com";
 const BASE = ORIGIN + "/sea";
