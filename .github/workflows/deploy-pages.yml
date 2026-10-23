@@ -25,10 +25,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Sync game dataset + images
-        run: |
-          npm run sync:data
-          npm run sync:images
+      # No sync step: public/data + public/media are committed (refreshed
+      # locally with sync:data/sync:images), same as the Cloudflare build.
 
       - name: Build web export (GitHub Pages project-site subpath)
         env:
