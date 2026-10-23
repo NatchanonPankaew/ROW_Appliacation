@@ -79,10 +79,13 @@ async function writeLocal(rel, obj) {
 }
 
 export async function mergeTwMaps() {
+  // roworlddb has since dropped zh-TW map data entirely (404), so prefer the
+  // committed local copy and only fall back to upstream if it is missing.
+  const zhFile = async (rel) => (await readLocal(rel)) || fetchJSON(ORIGIN + "/sea/" + rel);
   const [zhIndex, zhSpawns, zhAlbum] = await Promise.all([
-    fetchJSON(ORIGIN + "/sea/map-simulator/data/map_index_zh-TW.json"),
-    fetchJSON(ORIGIN + "/sea/map-simulator/data/map_monster_spawns_zh-TW.json"),
-    fetchJSON(ORIGIN + "/sea/monster-album/data/monster_album_zh-TW.json"),
+    zhFile("map-simulator/data/map_index_zh-TW.json"),
+    zhFile("map-simulator/data/map_monster_spawns_zh-TW.json"),
+    zhFile("monster-album/data/monster_album_zh-TW.json"),
   ]);
   const portraitById = new Map(zhAlbum.monsters.map((m) => [m.id, m.image]));
 
